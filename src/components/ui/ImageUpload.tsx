@@ -1,12 +1,15 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../../utils/fileValidation';
+import { ErrorAlert } from './ErrorAlert';
 
 interface ImageUploadProps {
   label: string;
   maxImages: number;
-  images: string[];
-  onImagesChange: (images: string[]) => void;
+  images: { key: string; previewUrl: string }[];
+  onImagesChange: (images: { key: string; previewUrl: string }[]) => void;
   required?: boolean;
   className?: string;
 }
@@ -21,40 +24,58 @@ export function ImageUpload({
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const { upload, isUploading, progress, error } = useFileUpload({
+    validationOptions: {
+      maxSize: FILE_SIZE_LIMITS.RESTAURANT_IMAGE,
+      allowedTypes: ALLOWED_FILE_TYPES.IMAGES,
+      minWidth: 800,
+      minHeight: 600,
+    },
+    maxFiles: maxImages,
+    onSuccess: (urls) => {
+      onImagesChange([...images, ...urls]);
+      setUploadError(null);
+    },
+    onError: (error) => {
+      setUploadError(error.message);
+    },
+  });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length + images.length > maxImages) {
-      alert(`You can only upload up to ${maxImages} images`);
+      setUploadError(`You can only upload up to ${maxImages} images`);
       return;
     }
 
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onImagesChange([...images, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      await upload(files);
+    } catch (error) {
+      console.error('Failed to upload files:', error);
+      if (error instanceof Error) {
+        setUploadError(error.message);
+      }
+    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length + images.length > maxImages) {
-      alert(`You can only upload up to ${maxImages} images`);
+      setUploadError(`You can only upload up to ${maxImages} images`);
       return;
     }
 
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onImagesChange([...images, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      await upload(files);
+    } catch (error) {
+      console.error('Failed to upload files:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to upload files');
+    }
   };
 
   const removeImage = (index: number) => {
@@ -66,6 +87,13 @@ export function ImageUpload({
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
+      
+      {uploadError && (
+        <ErrorAlert
+          message={uploadError}
+          onClose={() => setUploadError(null)}
+        />
+      )}
       
       <div
         className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
@@ -98,7 +126,7 @@ export function ImageUpload({
                 className="relative aspect-square rounded-lg overflow-hidden group"
               >
                 <img
-                  src={image}
+                  src={image.previewUrl}
                   alt={`Upload ${index + 1}`}
                   className="w-full h-full object-cover"
                 />
@@ -118,11 +146,18 @@ export function ImageUpload({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full py-4 flex flex-col items-center justify-center text-gray-500 hover:text-gray-600 transition-colors"
+            className={`w-full py-4 flex flex-col items-center justify-center text-gray-500 hover:text-gray-600 transition-colors ${
+              isUploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            disabled={isUploading}
           >
-            <Upload className="w-8 h-8 mb-2" />
+            {isUploading ? (
+              <div className="w-8 h-8 mb-2 border-2 border-gray-300 border-t-brand-primary rounded-full animate-spin" />
+            ) : (
+              <Upload className="w-8 h-8 mb-2" />
+            )}
             <span className="text-sm font-medium">
-              Drop images here or click to upload
+              {isUploading ? `Uploading... ${Object.values(progress)[0]}%` : 'Drop images here or click to upload'}
             </span>
             <span className="text-xs mt-1">
               {images.length} of {maxImages} images uploaded

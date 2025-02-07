@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AuthContextType, User } from '../types/auth';
 import { sendPhoneOTP } from '../services/auth';
 
@@ -7,6 +7,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(
+    localStorage.getItem('authToken')
+  );
 
   const login = async (phone: string, countryCode: string) => {
     setIsLoading(true);
@@ -16,6 +19,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(response.sendPhoneOtpForOnboardingVendorLogin.message);
       }
       
+      // Store token if provided in response
+      if (response.sendPhoneOtpForOnboardingVendorLogin.token) {
+        const token = response.sendPhoneOtpForOnboardingVendorLogin.token;
+        localStorage.setItem('authToken', token);
+        setAuthToken(token);
+      }
       setUser({
         id: '1',
         email: '',
@@ -34,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    setAuthToken(null);
   };
 
   const register = async (phone: string, countryCode: string, name: string) => {
@@ -51,6 +61,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
   };
+  // Monitor token expiration
+  useEffect(() => {
+    if (authToken) {
+      try {
+        const payload = JSON.parse(atob(authToken.split('.')[1]));
+        const expirationTime = payload.exp * 1000; // Convert to milliseconds
+        
+        if (Date.now() >= expirationTime) {
+          logout();
+        } else {
+          // Set timeout to logout when token expires
+          const timeout = setTimeout(() => {
+            logout();
+          }, expirationTime - Date.now());
+          
+          return () => clearTimeout(timeout);
+        }
+      } catch (error) {
+        console.error('Error parsing token:', error);
+        logout();
+      }
+    }
+  }, [authToken]);
 
   return (
     <AuthContext.Provider
@@ -61,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         register,
+        token: authToken,
       }}
     >
       {children}

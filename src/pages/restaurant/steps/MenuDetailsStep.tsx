@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { Clock, ChevronDown, Search } from 'lucide-react';
@@ -6,6 +7,9 @@ import { Input } from '../../../components/ui/Input';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { ImageUpload } from '../../../components/ui/ImageUpload';
 import { getCuisines } from '../../../services/restaurant';
+import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
+import { useFormValidation } from '../../../hooks/useFormValidation';
+import { validateImage, validateCuisines, validateOpeningHours } from '../../../utils/validation';
 
 interface MenuDetailsStepProps {
   onNext: () => void;
@@ -60,8 +64,15 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState('');
   const [selectedCuisineType, setSelectedCuisineType] = useState<string>('all');
-  const [errors, setErrors] = useState<string[]>([]);
   const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
+  const { application, updateApplication } = useRestaurantApplication();
+  const { errors, validate, clearErrors } = useFormValidation({
+    profileImage: validateImage,
+    restaurantImages: (images) => images.length >= 2 && images.length <= 4,
+    menuImages: (images) => images.length >= 1 && images.length <= 4,
+    cuisines: validateCuisines,
+    openingTimes: (times) => Object.values(times).every(t => !t.isOpen || (t.openTime && t.closeTime)),
+  });
   const [schedule, setSchedule] = useState<WeekSchedule>({
     monday: { isOpen: true, openTime: '09:00', closeTime: '22:00' },
     tuesday: { isOpen: true, openTime: '09:00', closeTime: '22:00' },
@@ -72,14 +83,20 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     sunday: { isOpen: true, openTime: '10:00', closeTime: '22:00' },
   });
 
-  const cuisineTypes = ['all', ...new Set(cuisines.map(c => c.cuisine))].sort();
+  const cuisineTypes = useMemo(() => 
+    ['all', ...new Set(cuisines.map(c => c.cuisine))].sort(),
+    [cuisines]
+  );
 
-  const filteredCuisines = cuisines.filter(cuisine => {
-    const matchesSearch = cuisine.name.toLowerCase().includes(cuisineSearch.toLowerCase()) ||
-                         cuisine.description.toLowerCase().includes(cuisineSearch.toLowerCase());
-    const matchesCuisineType = selectedCuisineType === 'all' || cuisine.cuisine === selectedCuisineType;
-    return matchesSearch && matchesCuisineType;
-  });
+  const filteredCuisines = useMemo(() => 
+    cuisines.filter(cuisine => {
+      const matchesSearch = cuisine.name.toLowerCase().includes(cuisineSearch.toLowerCase()) ||
+                           cuisine.description.toLowerCase().includes(cuisineSearch.toLowerCase());
+      const matchesCuisineType = selectedCuisineType === 'all' || cuisine.cuisine === selectedCuisineType;
+      return matchesSearch && matchesCuisineType;
+    }),
+    [cuisines, cuisineSearch, selectedCuisineType]
+  );
 
   const handleCuisineToggle = (cuisineId: string) => {
     setSelectedCuisines(prev => {
@@ -109,11 +126,24 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
     if (selectedCuisines.length !== 3) {
       alert('Please select exactly 3 cuisines');
       return;
     }
-    onNext();
+    
+    const formData = {
+      profileImage: profileImage,
+      restaurantImages: restaurantImages,
+      menuImages: menuImages,
+      cuisines: selectedCuisines,
+      openingTimes: schedule,
+    };
+
+    if (validate(formData)) {
+      updateApplication(formData);
+      onNext();
+    }
   };
 
   return (

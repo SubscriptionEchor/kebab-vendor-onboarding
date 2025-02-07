@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
+import { useFormValidation } from '../../../hooks/useFormValidation';
+import { validateDocument, validateBankAccount, validateBIC } from '../../../utils/validation';
 import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { Input } from '../../../components/ui/Input';
@@ -23,6 +26,16 @@ interface BankDetails {
 export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
+  const { application, updateApplication, submitApplication } = useRestaurantApplication();
+  const { errors, validate, clearErrors } = useFormValidation({
+    hospitalityLicense: validateDocument,
+    registrationCertificate: validateDocument,
+    bankDocument: validateDocument,
+    taxDocument: validateDocument,
+    idCards: (images: string[]) => images?.length > 0,
+    bankAccount: validateBankAccount,
+    bankIdentifierCode: validateBIC,
+  });
   const [documents, setDocuments] = useState({
     hospitalityLicense: [] as string[],
     registrationCertificate: [] as string[],
@@ -39,53 +52,65 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     bankIdentifierCode: '',
   });
 
-  const [errors, setErrors] = useState<string[]>([]);
+  const validateForm = useCallback(() => {
+    const validationData = {
+      hospitalityLicense: documents.hospitalityLicense.length > 0,
+      registrationCertificate: documents.registrationCertificate.length > 0,
+      idCards: documents.idCards.length > 0
+    };
+    
+    const isValid = validate(validationData);
+    
+    if (!isValid) {
+      const newErrors = [];
+      if (!validationData.hospitalityLicense) {
+        newErrors.push({ field: 'hospitalityLicense', message: 'Hospitality License is required' });
+      }
+      if (!validationData.registrationCertificate) {
+        newErrors.push({ field: 'registrationCertificate', message: 'Registration Certificate is required' });
+      }
+      if (!validationData.idCards) {
+        newErrors.push({ field: 'idCards', message: 'ID Cards are required' });
+      }
+      setErrors(newErrors);
+      return false;
+    }
+    
+    return isValid;
+  }, [documents, validate]);
 
-  const validateForm = () => {
-    const newErrors: string[] = [];
-
-    // Validate documents
-    if (documents.hospitalityLicense.length === 0) {
-      newErrors.push('Hospitality License is required');
-    }
-    if (documents.registrationCertificate.length === 0) {
-      newErrors.push('Registration Certificate is required');
-    }
-    if (documents.bankDocument.length === 0) {
-      newErrors.push('Bank Document is required');
-    }
-    if (documents.taxDocument.length === 0) {
-      newErrors.push('Tax Document is required');
-    }
-    if (documents.idCards.length === 0) {
-      newErrors.push('ID Cards are required');
-    }
-
-    // Validate bank details
-    if (!bankDetails.bankName) {
-      newErrors.push('Bank name is required');
-    }
-    if (!bankDetails.accountHolderName) {
-      newErrors.push('Account holder name is required');
-    }
-    if (!bankDetails.accountNumber) {
-      newErrors.push('Account number is required');
-    }
-    if (!bankDetails.branchName) {
-      newErrors.push('Branch name is required');
-    }
-    if (!bankDetails.bankIdentifierCode) {
-      newErrors.push('Bank identifier code is required');
-    }
-
-    setErrors(newErrors);
-    return newErrors.length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
+
     if (validateForm()) {
-      setShowSuccess(true);
+      try {
+        // Update application with documents and bank details
+        updateApplication({
+          businessDocuments: {
+            hospitalityLicense: documents.hospitalityLicense[0] || '',
+            registrationCertificate: documents.registrationCertificate[0] || '',
+            bankDetails: {
+              ...bankDetails,
+              documentUrl: documents.bankDocument[0] || '',
+            },
+            taxId: {
+              documentNumber: bankDetails?.bankIdentifierCode,
+              documentUrl: documents.taxDocument[0] || '',
+            },
+          },
+        });
+
+        // Submit the application
+        await submitApplication();
+        setShowSuccess(true);
+      } catch (error) {
+        if (error instanceof Error) {
+          setErrors([{ field: 'submit', message: error.message }]);
+        } else {
+          setErrors([{ field: 'submit', message: 'Failed to submit application. Please try again.' }]);
+        }
+      }
     }
   };
 
@@ -98,26 +123,31 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       key: 'hospitalityLicense' as const,
       label: 'Hospitality License',
       description: 'Upload your valid hospitality or food service license',
+      required: true
     },
     {
       key: 'registrationCertificate' as const,
       label: 'Registration Certificate',
       description: 'Business or company registration certificate',
+      required: true
     },
     {
       key: 'bankDocument' as const,
       label: 'Bank Document',
       description: 'Recent bank statement or voided check',
+      required: false
     },
     {
       key: 'taxDocument' as const,
       label: 'Tax Document',
       description: 'Valid tax registration or clearance certificate',
+      required: false
     },
     {
       key: 'idCards' as const,
       label: 'ID Cards',
       description: 'Government-issued ID cards of all owners',
+      required: true
     },
   ];
 
@@ -132,11 +162,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       {errors.length > 0 && (
         <div className="space-y-2">
           {errors.map((error, index) => (
-            <ErrorAlert
-              key={index}
-              message={error}
-              onClose={() => setErrors(errors.filter((_, i) => i !== index))}
-            />
+            <ErrorAlert key={index} message={error.message} onClose={clearErrors} />
           ))}
         </div>
       )}
@@ -176,7 +202,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 onImagesChange={(images) => 
                   setDocuments(prev => ({ ...prev, [doc.key]: images }))
                 }
-                required
+                required={doc.required}
               />
             </div>
           ))}
@@ -185,11 +211,12 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       {/* Bank Details Section */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Bank Account Details</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bank Account Details</h2>
+        <p className="text-sm text-gray-600 mb-6">Optional: You can provide your bank details now or later</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-lg border border-gray-200 p-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank Name <span className="text-red-500">*</span>
+              Bank Name
             </label>
             <Input
               value={bankDetails.bankName}
@@ -198,14 +225,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 bankName: e.target.value
               }))}
               placeholder="Enter bank name"
-              required
               className="h-11"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Holder Name <span className="text-red-500">*</span>
+              Account Holder Name
             </label>
             <Input
               value={bankDetails.accountHolderName}
@@ -214,14 +240,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 accountHolderName: e.target.value
               }))}
               placeholder="Enter account holder name"
-              required
               className="h-11"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Number <span className="text-red-500">*</span>
+              Account Number
             </label>
             <Input
               value={bankDetails.accountNumber}
@@ -230,14 +255,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 accountNumber: e.target.value
               }))}
               placeholder="Enter account number"
-              required
               className="h-11"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Branch Name <span className="text-red-500">*</span>
+              Branch Name
             </label>
             <Input
               value={bankDetails.branchName}
@@ -246,14 +270,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 branchName: e.target.value
               }))}
               placeholder="Enter branch name"
-              required
               className="h-11"
             />
           </div>
 
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank Identifier Code (BIC/SWIFT) <span className="text-red-500">*</span>
+              Bank Identifier Code (BIC/SWIFT)
             </label>
             <Input
               value={bankDetails.bankIdentifierCode}
@@ -262,7 +285,6 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
                 bankIdentifierCode: e.target.value
               }))}
               placeholder="Enter BIC/SWIFT code"
-              required
               className="h-11"
             />
           </div>

@@ -116,6 +116,9 @@ interface AdditionalOwner {
   phone: string;
   countryCode: string;
 }
+import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
+import { useFormValidation } from '../../../hooks/useFormValidation';
+import { validateCompanyName, validateRestaurantName, validateEmail, validatePhone, validateAddress, validateLocation, validatePassportId } from '../../../utils/validation';
 
 interface RestaurantInfoStepProps {
   onNext: () => void;
@@ -166,34 +169,17 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     hasMultipleOwners: false,
   });
   const [additionalOwners, setAdditionalOwners] = useState<AdditionalOwner[]>([]);
-  const [errors, setErrors] = useState<ValidationError[]>([]);
-
-  const validateForm = () => {
-    const newErrors: ValidationError[] = [];
-
-    // Validate required fields
-    if (!formData.ownerName) {
-      newErrors.push({ field: 'ownerName', message: 'Owner name is required' });
-    }
-    if (!formData.email) {
-      newErrors.push({ field: 'email', message: 'Email is required' });
-    }
-    if (!formData.phone) {
-      newErrors.push({ field: 'phone', message: 'Phone number is required' });
-    }
-    if (!formData.passportId) {
-      newErrors.push({ field: 'passportId', message: 'Passport ID is required' });
-    }
-    if (!formData.companyName) {
-      newErrors.push({ field: 'companyName', message: 'Company name is required' });
-    }
-    if (!formData.restaurantName) {
-      newErrors.push({ field: 'restaurantName', message: 'Restaurant name is required' });
-    }
-
-    setErrors(newErrors);
-    return newErrors.length === 0;
-  };
+  const { errors, validate, clearErrors } = useFormValidation({
+    companyName: validateCompanyName,
+    restaurantName: validateRestaurantName,
+    restaurantEmail: validateEmail,
+    restaurantPhone: validatePhone,
+    address: validateAddress,
+    ownerName: (value) => value.length >= 3,
+    passportId: validatePassportId,
+    email: validateEmail,
+    phone: validatePhone,
+  });
 
   const addOwner = () => {
     if (additionalOwners.length >= 6) return; // Maximum 7 owners (primary + 6 additional)
@@ -224,9 +210,60 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     );
   };
 
+  const { application, updateApplication } = useRestaurantApplication();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
+    clearErrors();
+
+    const validationData = {
+      companyName: formData.companyName,
+      restaurantName: formData.restaurantName,
+      restaurantEmail: formData.restaurantEmail,
+      restaurantPhone: formData.restaurantPhone,
+      address: `${formData.address.street} ${formData.address.number}, ${formData.address.postalCode} ${formData.address.city}`,
+      ownerName: formData.ownerName,
+      passportId: formData.passportId,
+      email: formData.email,
+      phone: formData.phone,
+    };
+
+    if (validate(validationData)) {
+      const applicationData = {
+        companyName: formData.companyName,
+        restaurantName: formData.restaurantName,
+        restaurantContactInfo: {
+          email: formData.restaurantEmail,
+          phone: formData.restaurantPhone,
+        },
+        location: {
+          coordinates: {
+            type: 'Point' as const,
+            coordinates: [formData.location.lng, formData.location.lat],
+          },
+          address: `${formData.address.street} ${formData.address.number}, ${formData.address.postalCode} ${formData.address.city}`,
+        },
+        beneficialOwners: [
+          {
+            name: formData.ownerName,
+            passportId: formData.passportId,
+            email: formData.email,
+            phone: formData.phone,
+            isPrimary: true,
+            idCardDocuments: [],
+          },
+          ...additionalOwners.map(owner => ({
+            name: `${owner.firstName} ${owner.lastName}`,
+            passportId: owner.passportId,
+            email: owner.email,
+            phone: owner.phone,
+            isPrimary: false,
+            idCardDocuments: [],
+          })),
+        ],
+      };
+
+      updateApplication(applicationData);
       onNext();
     }
   };
@@ -258,7 +295,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
             <ErrorAlert
               key={index}
               message={error.message}
-              onClose={() => setErrors(errors.filter((_, i) => i !== index))}
+              onClose={() => clearErrors()}
             />
           ))}
         </div>

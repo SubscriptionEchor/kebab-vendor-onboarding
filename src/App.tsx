@@ -1,4 +1,5 @@
 import { AuthProvider } from './context/AuthContext';
+import { RestaurantApplicationProvider } from './context/RestaurantApplicationContext';
 import { MainLayout } from './layouts/MainLayout';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { VerifyPhonePage } from './pages/VerifyPhonePage';
@@ -20,6 +21,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      <RestaurantApplicationProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/verify-otp" element={<VerifyOTPPage />} />
@@ -74,6 +76,7 @@ function App() {
           />
         </Routes>
       </BrowserRouter>
+      </RestaurantApplicationProvider>
       </ToastProvider>
     </AuthProvider>
   );
