@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../../utils/fileValidation';
@@ -10,6 +10,7 @@ interface ImageUploadProps {
   maxImages: number;
   images: { key: string; previewUrl: string }[];
   onImagesChange: (images: { key: string; previewUrl: string }[]) => void;
+  acceptDocuments?: boolean;
   required?: boolean;
   className?: string;
 }
@@ -19,6 +20,7 @@ export function ImageUpload({
   maxImages,
   images,
   onImagesChange,
+  acceptDocuments = false,
   required,
   className = '',
 }: ImageUploadProps) {
@@ -29,9 +31,12 @@ export function ImageUpload({
   const { upload, isUploading, progress, error } = useFileUpload({
     validationOptions: {
       maxSize: FILE_SIZE_LIMITS.RESTAURANT_IMAGE,
-      allowedTypes: ALLOWED_FILE_TYPES.IMAGES,
-      minWidth: 800,
-      minHeight: 600,
+      allowedTypes: acceptDocuments ? ALLOWED_FILE_TYPES.DOCUMENTS : ALLOWED_FILE_TYPES.IMAGES,
+      // Only apply dimension restrictions for images
+      ...(acceptDocuments ? {} : {
+        minWidth: 800,
+        minHeight: 600,
+      }),
     },
     maxFiles: maxImages,
     onSuccess: (urls) => {
@@ -110,7 +115,7 @@ export function ImageUpload({
           type="file"
           ref={fileInputRef}
           className="hidden"
-          accept="image/*"
+          accept={acceptDocuments ? ".pdf,image/*" : "image/*"}
           multiple
           onChange={handleFileChange}
         />
@@ -125,11 +130,17 @@ export function ImageUpload({
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="relative aspect-square rounded-lg overflow-hidden group"
               >
-                <img
-                  src={image.previewUrl}
-                  alt={`Upload ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
+                {image.previewUrl.endsWith('.pdf') ? (
+                  <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                    <FileText className="w-12 h-12 text-gray-400" />
+                  </div>
+                ) : (
+                  <img
+                    src={image.previewUrl}
+                    alt={`Upload ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => removeImage(index)}

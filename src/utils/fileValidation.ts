@@ -9,7 +9,7 @@ export const FILE_SIZE_LIMITS = {
 // Allowed file types
 export const ALLOWED_FILE_TYPES = {
   IMAGES: ['image/jpeg', 'image/png', 'image/webp'],
-  DOCUMENTS: ['application/pdf', 'image/jpeg', 'image/png'],
+  DOCUMENTS: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
 } as const;
 
 export class FileValidationError extends Error {
@@ -54,7 +54,7 @@ export async function validateFile(file: File, options: FileValidationOptions): 
       (options.minWidth || options.minHeight || options.maxWidth || options.maxHeight)) {
     try {
       const dimensions = await getImageDimensions(file);
-
+      // Only validate dimensions for images, skip for PDFs
       if (options.minWidth && dimensions.width < options.minWidth) {
         throw new FileValidationError(`Image width must be at least ${options.minWidth}px`);
       }

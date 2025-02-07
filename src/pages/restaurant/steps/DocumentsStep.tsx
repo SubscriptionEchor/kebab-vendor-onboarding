@@ -26,8 +26,9 @@ interface BankDetails {
 export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
-  const { errors, validate, clearErrors } = useFormValidation({
+  const { errors: validationErrors, validate, clearErrors } = useFormValidation({
     hospitalityLicense: validateDocument,
     registrationCertificate: validateDocument,
     bankDocument: validateDocument,
@@ -62,15 +63,15 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     const isValid = validate(validationData);
     
     if (!isValid) {
-      const newErrors = [];
+      const newErrors: string[] = [];
       if (!validationData.hospitalityLicense) {
-        newErrors.push({ field: 'hospitalityLicense', message: 'Hospitality License is required' });
+        newErrors.push('Hospitality License is required');
       }
       if (!validationData.registrationCertificate) {
-        newErrors.push({ field: 'registrationCertificate', message: 'Registration Certificate is required' });
+        newErrors.push('Registration Certificate is required');
       }
       if (!validationData.idCards) {
-        newErrors.push({ field: 'idCards', message: 'ID Cards are required' });
+        newErrors.push('ID Cards are required');
       }
       setErrors(newErrors);
       return false;
@@ -82,6 +83,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    setErrors([]);
 
     if (validateForm()) {
       try {
@@ -106,9 +108,9 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
         setShowSuccess(true);
       } catch (error) {
         if (error instanceof Error) {
-          setErrors([{ field: 'submit', message: error.message }]);
+          setErrors([error.message]);
         } else {
-          setErrors([{ field: 'submit', message: 'Failed to submit application. Please try again.' }]);
+          setErrors(['Failed to submit application. Please try again.']);
         }
       }
     }
@@ -162,7 +164,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       {errors.length > 0 && (
         <div className="space-y-2">
           {errors.map((error, index) => (
-            <ErrorAlert key={index} message={error.message} onClose={clearErrors} />
+            <ErrorAlert key={index} message={error} onClose={() => setErrors([])} />
           ))}
         </div>
       )}
@@ -198,6 +200,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
               <ImageUpload
                 label="Upload Document"
                 maxImages={doc.key === 'idCards' ? 4 : 1}
+                acceptDocuments={true}
                 images={documents[doc.key]}
                 onImagesChange={(images) => 
                   setDocuments(prev => ({ ...prev, [doc.key]: images }))

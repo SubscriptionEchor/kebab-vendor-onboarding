@@ -61,7 +61,15 @@ export async function sendPhoneOTP(phoneNumber: string) {
 }
 
 export async function verifyPhoneOTP(phoneNumber: string, otp: string) {
+  try {
   return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { phoneNumber, otp });
+  } catch (error) {
+    console.error('Phone verification failed:', error);
+    if (error instanceof Error) {
+      throw new Error(error.message || 'Phone verification failed');
+    }
+    throw new Error('Phone verification failed. Please try again.');
+  }
 }
 
 export async function sendEmailOTP(email: string) {
@@ -70,6 +78,7 @@ export async function sendEmailOTP(email: string) {
     throw new Error('Please log in again to verify your email');
   }
 
+  try {
   return graphqlRequest<SendEmailOTPResponse>(
     SEND_EMAIL_OTP,
     {
@@ -85,6 +94,13 @@ export async function sendEmailOTP(email: string) {
       'Priority': 'u=1, i'
     }
   );
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    if (error instanceof Error) {
+      throw new Error(error.message || 'Failed to send verification email');
+    }
+    throw new Error('Failed to send verification email. Please try again.');
+  }
 }
 
 export async function verifyEmailOTP(email: string, otp: string) {

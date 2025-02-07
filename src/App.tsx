@@ -19,10 +19,10 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-      <RestaurantApplicationProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastProvider>
+          <RestaurantApplicationProvider>
         <Routes>
           <Route path="/verify-otp" element={<VerifyOTPPage />} />
           <Route path="/verify-phone" element={<VerifyPhonePage />} />
@@ -75,10 +75,10 @@ function App() {
             }
           />
         </Routes>
-      </BrowserRouter>
-      </RestaurantApplicationProvider>
-      </ToastProvider>
-    </AuthProvider>
+          </RestaurantApplicationProvider>
+        </ToastProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 
 }

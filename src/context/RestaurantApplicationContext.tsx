@@ -1,12 +1,13 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { RestaurantApplication, RestaurantApplicationContextType, RestaurantApplicationResponse } from '../types/restaurant';
 import { graphqlRequest } from '../services/api';
 
 const CREATE_APPLICATION = `
-  mutation CreateApplication($input: CreateRestaurantOnboardingApplicationInput!) {
+  mutation CreateApplication($input: RestaurantOnboardingApplicationInput!) {
     createRestaurantOnboardingApplication(input: $input) {
       _id
+      resubmissionCount
       applicationStatus
       restaurantName
       createdAt
@@ -81,8 +82,20 @@ const RestaurantApplicationContext = createContext<RestaurantApplicationContextT
 export function RestaurantApplicationProvider({ children }: { children: React.ReactNode }) {
   const [application, setApplication] = useLocalStorage<RestaurantApplication | null>(
     'restaurantApplication',
-    null
+    defaultApplication
   );
+
+  // Listen for beforeunload event to save data before refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (application) {
+        localStorage.setItem('restaurantApplication', JSON.stringify(application));
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [application]);
 
   const updateApplication = (data: Partial<RestaurantApplication>) => {
     setApplication(prev => {
@@ -119,40 +132,40 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     // Format the application data according to the API requirements
     const input = {
       beneficialOwners: application.beneficialOwners.map(owner => ({
-        name: owner.name,
-        passportId: owner.passportId,
-        email: owner.email,
-        phone: owner.phone,
-        isPrimary: owner.isPrimary,
-        idCardDocuments: owner.idCardDocuments
+        name: owner.name || '',
+        passportId: owner.passportId || '',
+        email: owner.email || '',
+        phone: owner.phone || '',
+        isPrimary: owner.isPrimary || false,
+        idCardDocuments: owner.idCardDocuments || []
       })),
       companyName: application.companyName,
       restaurantName: application.restaurantName,
       restaurantContactInfo: {
-        email: application.restaurantContactInfo.email,
-        phone: application.restaurantContactInfo.phone
+        email: application.restaurantContactInfo.email || '',
+        phone: application.restaurantContactInfo.phone || ''
       },
       location: {
         coordinates: application.location.coordinates,
         address: application.location.address
       },
-      restaurantImages: application.restaurantImages,
-      menuImages: application.menuImages,
-      profileImage: application.profileImage,
+      restaurantImages: application.restaurantImages.map(img => img.key || ''),
+      menuImages: application.menuImages.map(img => img.key || ''),
+      profileImage: application.profileImage || '',
       cuisines: application.cuisines,
       openingTimes: application.openingTimes.map(time => ({
         day: time.day,
         isOpen: time.isOpen,
-        times: time.isOpen ? [{
-          startTime: [time.times?.[0].startTime[0] || ''],
-          endTime: [time.times?.[0].endTime[0] || '']
+        times: time.isOpen && time.times?.[0] ? [{
+          startTime: [time.times[0].startTime[0] || ''],
+          endTime: [time.times[0].endTime[0] || '']
         }] : []
       })),
       businessDocuments: {
         hospitalityLicense: application.businessDocuments.hospitalityLicense,
         registrationCertificate: application.businessDocuments.registrationCertificate,
         taxId: {
-          documentNumber: application.businessDocuments.taxId.documentNumber,
+          documentNumber: application.businessDocuments.taxId.documentNumber || 'default',
           documentUrl: application.businessDocuments.taxId.documentUrl
         }
       }
@@ -165,12 +178,17 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         headers
       );
 
+      console.log('Application submitted successfully:', response);
+
       // Clear the stored application data after successful submission
       resetApplication();
 
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
       console.error('Failed to submit application:', error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to submit application: ${error.message}`);
+      }
       throw error;
     }
   };
