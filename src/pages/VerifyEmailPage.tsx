@@ -8,6 +8,8 @@ import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { validateEmail } from '../utils/validation';
 import confetti from 'canvas-confetti';
 
+import { sendEmailOTP, verifyEmailOTP } from '../services/auth';
+
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -55,20 +57,38 @@ export function VerifyEmailPage() {
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-
+    setIsLoading(true);
+    
     if (!validateEmail(email)) {
       setErrors(['Please enter a valid email address']);
+      setIsLoading(false);
       return;
     }
-
-    setIsLoading(true);
+    
     try {
-      // TODO: Implement actual email sending
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setIsEmailSent(true);
+      const response = await sendEmailOTP(email);
+      
+      if (response.sendEmailOtpForOnboardingVendor.result) {
+        setIsEmailSent(true);
+      } else {
+        const errorMessage = response.sendEmailOtpForOnboardingVendor.message;
+        if (errorMessage.includes('already exists')) {
+          setErrors(['This email is already registered. Please use a different email address or contact our support team for help.']);
+        } else {
+          setErrors([errorMessage]);
+        }
+      }
     } catch (error) {
       console.error('Failed to send email:', error);
-      setErrors(['Failed to send verification code. Please try again.']);
+      if (error instanceof Error) {
+        if (error.message.includes('log in again')) {
+          navigate('/login');
+        } else {
+          setErrors([error.message]);
+        }
+      } else {
+        setErrors(['Failed to send verification code. Please try again.']);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -77,23 +97,52 @@ export function VerifyEmailPage() {
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
+    setIsLoading(true);
 
-    if (!otp) {
-      setErrors(['Please enter the verification code']);
+    if (!email) {
+      setErrors(['Please enter your email address']);
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    if (!otp) {
+      setErrors(['Please enter the verification code']);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // TODO: Implement actual email verification
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await verifyEmailOTP(email, otp);
+
+      if (!response || !response.verifyEmailOtpForOnboardingVendor || !response.verifyEmailOtpForOnboardingVendor.emailIsVerified) {
+        throw new Error('Email verification failed. Please try again.');
+      }
+
+      // Show success animation
       fireConfetti();
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
+      
+      // Wait for animation before redirecting
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Redirect to dashboard
+      navigate('/dashboard');
     } catch (error) {
       console.error('Email verification failed:', error);
-      setErrors(['Invalid verification code. Please try again.']);
+      if (error instanceof Error) {
+        if (error.message.includes('Authentication required')) {
+          navigate('/login');
+        } else if (error.message.includes('not found')) {
+          setErrors(['Email not found. Please check your email address.']);
+        } else if (error.message.includes('Invalid OTP')) {
+          setErrors(['Invalid verification code. Please check and try again.']);
+        } else if (error.message.includes('expired')) {
+          setErrors(['Verification code has expired. Please request a new code.']);
+        } else {
+          setErrors([error.message]);
+        }
+      } else {
+        setErrors(['Verification failed. Please try again.']);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -156,7 +205,7 @@ export function VerifyEmailPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your work email"
-              className="text-lg py-6"
+              className="text-lg h-14"
               required
             />
             
@@ -176,7 +225,7 @@ export function VerifyEmailPage() {
               value={otp}
               onChange={(e) => setOtp(e.target.value)}
               placeholder="Enter verification code"
-              className="text-lg py-6"
+              className="text-lg h-14"
               required
             />
             

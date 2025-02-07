@@ -1,6 +1,7 @@
 export interface User {
   id: string;
   email: string;
+  phone?: string;
   name: string;
   role: 'owner' | 'manager' | 'staff';
 }
@@ -12,7 +13,7 @@ export interface AuthState {
 }
 
 export interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (phone: string, countryCode: string) => Promise<void>;
   logout: () => void;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (phone: string, countryCode: string, name: string) => Promise<void>;
 }

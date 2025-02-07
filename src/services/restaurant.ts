@@ -1,0 +1,79 @@
+import { graphqlRequest } from './api';
+import type { CreateRestaurantResponse, UpdateRestaurantResponse, UploadDocumentResponse } from './types';
+
+const CREATE_RESTAURANT = `
+  mutation CreateRestaurant($input: CreateRestaurantInput!) {
+    createRestaurant(input: $input) {
+      id
+      name
+      status
+    }
+  }
+`;
+
+const UPDATE_RESTAURANT = `
+  mutation UpdateRestaurant($id: ID!, $input: UpdateRestaurantInput!) {
+    updateRestaurant(id: $id, input: $input) {
+      id
+      name
+      status
+    }
+  }
+`;
+
+const UPLOAD_DOCUMENT = `
+  mutation UploadDocument($restaurantId: ID!, $type: DocumentType!, $file: Upload!) {
+    uploadDocument(restaurantId: $restaurantId, type: $type, file: $file) {
+      id
+      url
+      status
+    }
+  }
+`;
+
+export interface CreateRestaurantInput {
+  name: string;
+  email: string;
+  phone: string;
+  address: {
+    street: string;
+    number: string;
+    city: string;
+    postalCode: string;
+    country: string;
+    location: {
+      lat: number;
+      lng: number;
+    };
+  };
+  owners: Array<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    passportId: string;
+  }>;
+  bankDetails: {
+    bankName: string;
+    accountHolderName: string;
+    accountNumber: string;
+    branchName: string;
+    bankIdentifierCode: string;
+  };
+}
+
+export async function createRestaurant(input: CreateRestaurantInput) {
+  return graphqlRequest<CreateRestaurantResponse>(CREATE_RESTAURANT, { input });
+}
+
+export async function updateRestaurant(id: string, input: Partial<CreateRestaurantInput>) {
+  return graphqlRequest<UpdateRestaurantResponse>(UPDATE_RESTAURANT, { id, input });
+}
+
+export async function uploadDocument(restaurantId: string, type: string, file: File) {
+  return graphqlRequest<UploadDocumentResponse>(UPLOAD_DOCUMENT, {
+    restaurantId,
+    type,
+    file
+  });
+}

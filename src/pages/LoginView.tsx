@@ -19,6 +19,11 @@ export function LoginView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
+    
+    if (!validatePhone(phone)) {
+      setErrors(['Please enter a valid phone number']);
+      return;
+    }
 
     if (!validatePhone(phone)) {
       setErrors(['Please enter a valid phone number']);
@@ -28,18 +33,15 @@ export function LoginView() {
     setIsLoading(true);
     try {
       const formattedPhone = `${countryCode === 'IN' ? '+91' : '+49'}${phone}`;
-      const response = await sendPhoneOTP(formattedPhone);
-      
-      if (!response.sendPhoneOtpForOnboardingVendorLogin.result) {
-        setErrors([response.sendPhoneOtpForOnboardingVendorLogin.message]);
-        return;
-      }
-      
       await login(formattedPhone, countryCode);
       navigate('/verify-phone');
     } catch (error) {
       console.error('Login failed:', error);
-      setErrors(['Failed to send verification code. Please try again.']);
+      if (error instanceof Error) {
+        setErrors([error.message]);
+      } else {
+        setErrors(['Failed to send verification code. Please try again.']);
+      }
     } finally {
       setIsLoading(false);
     }

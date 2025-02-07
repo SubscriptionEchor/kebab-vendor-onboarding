@@ -4,14 +4,23 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ArrowLeft } from 'lucide-react';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
+import { verifyPhoneOTP, sendPhoneOTP } from '../services/auth';
+import { useAuth } from '../context/AuthContext';
 
 export function VerifyPhonePage() {
   const navigate = useNavigate();
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const { user } = useAuth();
+  const [otp, setOtp] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [timer, setTimer] = useState(30);
   const [errors, setErrors] = useState<string[]>([]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!user?.phone) {
+      navigate('/login');
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (timer > 0) {
@@ -28,7 +37,7 @@ export function VerifyPhonePage() {
     setOtp(newOtp);
 
     // Move to next input if value is entered
-    if (value && index < 5) {
+    if (value && index < 3) {
       inputRefs.current[index + 1]?.focus();
     }
   };
@@ -39,31 +48,59 @@ export function VerifyPhonePage() {
     }
   };
 
+  const handleResend = async () => {
+    if (!user?.phone) return;
+    
+    try {
+      const response = await sendPhoneOTP(user.phone);
+      if (response.sendPhoneOtpForOnboardingVendorLogin.result) {
+        setTimer(30);
+      } else {
+        setErrors([response.sendPhoneOtpForOnboardingVendorLogin.message]);
+      }
+    } catch (error) {
+      console.error('Failed to resend OTP:', error);
+      setErrors(['Failed to send verification code. Please try again.']);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    
-    if (otp.some(digit => !digit)) {
+    const otpString = otp.join('');
+
+    if (otpString.length !== 4) {
       setErrors(['Please enter the complete verification code']);
       return;
     }
 
     setIsLoading(true);
     try {
-      // TODO: Implement actual phone verification
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      navigate('/verify-email');
+      if (!user?.phone) {
+        throw new Error('Phone number not found');
+      }
+      const response = await verifyPhoneOTP(user.phone, otpString);
+      
+      if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
+        // Store the token for future API calls
+        localStorage.setItem('authToken', response.verifyPhoneOtpForOnboardingVendorAndLogin.token);
+        
+        // Check if this is a new vendor
+        if (response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor) {
+          navigate('/verify-email');
+          return;
+        } 
+        
+        navigate('/dashboard');
+      } else {
+        setErrors(['Verification failed. Please try again.']);
+      }
     } catch (error) {
       console.error('Phone verification failed:', error);
       setErrors(['Invalid verification code. Please try again.']);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleResend = () => {
-    setTimer(30);
-    // TODO: Implement actual resend logic
   };
 
   return (
