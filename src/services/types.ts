@@ -51,6 +51,15 @@ export interface VerifyEmailOTPResponse {
 }
 
 // Restaurant Types
+export interface GetCuisinesResponse {
+  vendorOnboardingBootstrap: {
+    cuisines: Array<{
+      name: string;
+    }>;
+  };
+}
+
+// Restaurant Types
 export interface CreateRestaurantResponse {
   createRestaurant: {
     id: string;

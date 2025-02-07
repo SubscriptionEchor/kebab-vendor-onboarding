@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../../../components/ui/Button';
 import { Clock, ChevronDown, Search } from 'lucide-react';
 import { Input } from '../../../components/ui/Input';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { ImageUpload } from '../../../components/ui/ImageUpload';
+import { getCuisines } from '../../../services/restaurant';
 
 interface MenuDetailsStepProps {
   onNext: () => void;
@@ -17,11 +18,18 @@ interface DaySchedule {
   closeTime: string;
 }
 
+interface Cuisine {
+  id: string;
+  name: string;
+  description: string;
+  cuisine: string;
+}
+
 type WeekSchedule = {
   [key in 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday']: DaySchedule;
 };
 
-const kebabCuisines = [
+const defaultCuisines = [
   { id: 'doner', name: 'Döner Kebab', description: 'Turkish-style meat in flatbread', cuisine: 'Turkish' },
   { id: 'shawarma', name: 'Shawarma', description: 'Middle Eastern-style wrapped meat', cuisine: 'Middle Eastern' },
   { id: 'gyros', name: 'Gyros', description: 'Greek-style meat with tzatziki', cuisine: 'Greek' },
@@ -48,10 +56,12 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [restaurantImages, setRestaurantImages] = useState<string[]>([]);
   const [menuImages, setMenuImages] = useState<string[]>([]);
   const [profileImage, setProfileImage] = useState<string[]>([]);
+  const [cuisines, setCuisines] = useState<Cuisine[]>(defaultCuisines);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState('');
   const [selectedCuisineType, setSelectedCuisineType] = useState<string>('all');
   const [errors, setErrors] = useState<string[]>([]);
+  const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
   const [schedule, setSchedule] = useState<WeekSchedule>({
     monday: { isOpen: true, openTime: '09:00', closeTime: '22:00' },
     tuesday: { isOpen: true, openTime: '09:00', closeTime: '22:00' },
@@ -62,9 +72,9 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     sunday: { isOpen: true, openTime: '10:00', closeTime: '22:00' },
   });
 
-  const cuisineTypes = ['all', ...new Set(kebabCuisines.map(c => c.cuisine))].sort();
+  const cuisineTypes = ['all', ...new Set(cuisines.map(c => c.cuisine))].sort();
 
-  const filteredCuisines = kebabCuisines.filter(cuisine => {
+  const filteredCuisines = cuisines.filter(cuisine => {
     const matchesSearch = cuisine.name.toLowerCase().includes(cuisineSearch.toLowerCase()) ||
                          cuisine.description.toLowerCase().includes(cuisineSearch.toLowerCase());
     const matchesCuisineType = selectedCuisineType === 'all' || cuisine.cuisine === selectedCuisineType;
@@ -157,7 +167,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Kebab Cuisines</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Select 3 types of kebab that best represent your restaurant ({3 - selectedCuisines.length} selections remaining)
+          Select 3 cuisines that best represent your restaurant ({3 - selectedCuisines.length} selections remaining)
         </p>
         
         {/* Search and Filter */}
@@ -188,38 +198,53 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredCuisines.map((cuisine) => (
-            <button
-              key={cuisine.id}
-              type="button"
-              onClick={() => handleCuisineToggle(cuisine.id)}
-              className={`p-4 rounded-lg text-left transition-all ${
-                selectedCuisines.includes(cuisine.id)
-                  ? 'bg-brand-primary/10 border-2 border-brand-primary shadow-md'
-                  : selectedCuisines.length >= 3
-                    ? 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
-                    : 'bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md'
-              }`}
-              disabled={selectedCuisines.length >= 3 && !selectedCuisines.includes(cuisine.id)}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-medium">{cuisine.name}</div>
-                  <div className="text-sm text-gray-600">{cuisine.description}</div>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                  {cuisine.cuisine}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-        
-        {filteredCuisines.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No cuisines found matching your search
+        {isLoadingCuisines && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((_, index) => (
+              <div
+                key={index}
+                className="h-24 rounded-lg bg-gray-100 animate-pulse"
+              />
+            ))}
           </div>
+        )}
+
+        {!isLoadingCuisines && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredCuisines.map((cuisine) => (
+                <button
+                  key={cuisine.id}
+                  type="button"
+                  onClick={() => handleCuisineToggle(cuisine.id)}
+                  className={`p-4 rounded-lg text-left transition-all ${
+                    selectedCuisines.includes(cuisine.id)
+                      ? 'bg-brand-primary/10 border-2 border-brand-primary shadow-md'
+                      : selectedCuisines.length >= 3
+                        ? 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
+                        : 'bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md'
+                  }`}
+                  disabled={selectedCuisines.length >= 3 && !selectedCuisines.includes(cuisine.id)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium">{cuisine.name}</div>
+                      <div className="text-sm text-gray-600">{cuisine.description}</div>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                      {cuisine.cuisine}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+        
+            {filteredCuisines.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                No cuisines found matching your search
+              </div>
+            )}
+          </>
         )}
       </div>
 

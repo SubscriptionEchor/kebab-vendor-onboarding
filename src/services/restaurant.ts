@@ -1,5 +1,20 @@
 import { graphqlRequest } from './api';
-import type { CreateRestaurantResponse, UpdateRestaurantResponse, UploadDocumentResponse } from './types';
+import type { 
+  CreateRestaurantResponse, 
+  UpdateRestaurantResponse, 
+  UploadDocumentResponse,
+  GetCuisinesResponse
+} from './types';
+
+const GET_CUISINES = `
+  query VendorOnboardingBootstrap {
+    vendorOnboardingBootstrap {
+      cuisines {
+        name
+      }
+    }
+  }
+`;
 
 const CREATE_RESTAURANT = `
   mutation CreateRestaurant($input: CreateRestaurantInput!) {
@@ -76,4 +91,8 @@ export async function uploadDocument(restaurantId: string, type: string, file: F
     type,
     file
   });
+}
+
+export async function getCuisines() {
+  return graphqlRequest<GetCuisinesResponse>(GET_CUISINES);
 }
