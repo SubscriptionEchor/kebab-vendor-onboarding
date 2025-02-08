@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { FileText, AlertCircle } from 'lucide-react';
+import { RequiredLabel } from './RestaurantInfoStep';
 
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
 import { useFormValidation } from '../../../hooks/useFormValidation';
@@ -33,6 +34,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     // Only validate required documents
     hospitalityLicense: (value: boolean) => value,
     registrationCertificate: (value: boolean) => value,
+    taxDocument: (value: boolean) => value,
     idCards: (value: boolean) => value,
   });
   const [documents, setDocuments] = useState({
@@ -48,7 +50,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     accountHolderName: '',
     accountNumber: '',
     branchName: '',
-    bankIdentifierCode: '',
+    bankIdentifierCode: '', // This is used as the tax document number
   });
 
   const validateForm = useCallback(() => {
@@ -58,6 +60,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     const validationData = {
       hospitalityLicense: documents.hospitalityLicense.length > 0,
       registrationCertificate: documents.registrationCertificate.length > 0,
+      taxDocument: documents.taxDocument.length > 0,
       idCards: documents.idCards.length > 0
     };
     
@@ -71,6 +74,9 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       }
       if (!validationData.registrationCertificate) {
         newErrors.push('Please upload a Registration Certificate');
+      }
+      if (!validationData.taxDocument) {
+        newErrors.push('Please upload a Tax Document');
       }
       if (!validationData.idCards) {
         newErrors.push('Please upload at least one ID Card');
@@ -86,60 +92,73 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     e.preventDefault();
     clearErrors();
     setErrors([]);
-    console.log('Starting form submission');
-    console.log('Current documents state:', documents);
-
-    if (validateForm()) {
-      console.log('Form validation passed');
-      try {
-        // Ensure we have the required documents
-        if (!documents.hospitalityLicense[0]?.key) {
-          throw new Error('Hospitality License is required');
-        }
-        if (!documents.registrationCertificate[0]?.key) {
-          throw new Error('Registration Certificate is required');
-        }
-        if (documents.idCards.length === 0) {
-          throw new Error('At least one ID Card is required');
-        }
-
-        const applicationData = {
-          businessDocuments: {
-            hospitalityLicense: documents.hospitalityLicense[0]?.key,
-            registrationCertificate: documents.registrationCertificate[0]?.key,
-            bankDetails: {
-              ...bankDetails,
-              documentUrl: documents.bankDocument[0]?.key,
-            },
-            taxId: {
-              documentNumber: bankDetails?.bankIdentifierCode,
-              documentUrl: documents.taxDocument[0]?.key,
-            },
-          },
-          beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-            ...owner,
-            idCardDocuments: documents.idCards.map(doc => doc.key)
-          })) || []
-        };
-        
-        console.log('Updating application with:', applicationData);
-        await updateApplication(applicationData);
-
-        console.log('Submitting application...');
-        await submitApplication();
-        console.log('Application submitted successfully');
-        setShowSuccess(true);
-      } catch (error) {
-        console.error('Submission failed:', error);
-        if (error instanceof Error) {
-          setErrors([error.message]);
-        } else {
-          setErrors(['Failed to submit application. Please try again.']);
-        }
-      }
+    
+    // Validate all required fields first
+    const validationErrors = [];
+    
+    if (!documents.hospitalityLicense[0]?.key) {
+      validationErrors.push('Hospitality License is required');
     }
-    else {
-      console.log('Form validation failed');
+    if (!documents.registrationCertificate[0]?.key) {
+      validationErrors.push('Registration Certificate is required');
+    }
+    if (!documents.taxDocument[0]?.key) {
+      validationErrors.push('Tax Document is required');
+    }
+    if (!bankDetails.bankIdentifierCode) {
+      validationErrors.push('Bank Identifier Code (BIC/SWIFT) is required');
+    }
+    if (documents.idCards.length === 0) {
+      validationErrors.push('At least one ID Card is required');
+    }
+    
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    try {
+      // Format phone numbers to international format
+      const formatPhoneNumber = (phone: string, countryCode: string) => {
+        const cleanPhone = phone.replace(/\D/g, '');
+        const normalizedPhone = cleanPhone.replace(/^0+/, '');
+        return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
+      };
+
+      // Prepare application data with proper formatting
+      const applicationData = {
+        businessDocuments: {
+          hospitalityLicense: documents.hospitalityLicense[0]?.key,
+          registrationCertificate: documents.registrationCertificate[0]?.key,
+          bankDetails: {
+            ...bankDetails,
+            documentUrl: documents.bankDocument[0]?.key,
+          },
+          taxId: {
+            documentNumber: bankDetails.bankIdentifierCode,
+            documentUrl: documents.taxDocument[0]?.key,
+          },
+        },
+        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
+          ...owner,
+          phone: formatPhoneNumber(owner.phone, owner.countryCode || 'DE'),
+          idCardDocuments: documents.idCards.map(doc => doc.key).filter(Boolean)
+        })) || []
+      };
+
+      // Update application state
+      await updateApplication(applicationData);
+      
+      // Submit the application
+      await submitApplication();
+      setShowSuccess(true);
+    } catch (error) {
+      console.error('Submission failed:', error);
+      if (error instanceof Error) {
+        setErrors([error.message]);
+      } else {
+        setErrors(['Failed to submit application. Please try again.']);
+      }
     }
   };
 
@@ -170,7 +189,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       key: 'taxDocument' as const,
       label: 'Tax Document',
       description: 'Valid tax registration or clearance certificate',
-      required: false
+      required: true
     },
     {
       key: 'idCards' as const,
@@ -246,7 +265,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       {/* Bank Details Section */}
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Bank Account Details</h2>
-        <p className="text-sm text-gray-600 mb-6">Optional: You can provide your bank details now or later</p>
+        <p className="text-sm text-gray-600 mb-6">Please provide your bank details and tax identification number</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-lg border border-gray-200 p-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -309,15 +328,16 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <RequiredLabel>
               Bank Identifier Code (BIC/SWIFT)
-            </label>
+            </RequiredLabel>
             <Input
               value={bankDetails.bankIdentifierCode}
               onChange={(e) => setBankDetails(prev => ({
                 ...prev,
                 bankIdentifierCode: e.target.value
               }))}
+              required
               placeholder="Enter BIC/SWIFT code"
               className="h-11"
             />

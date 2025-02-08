@@ -44,9 +44,9 @@ type WeekSchedule = {
 const DEFAULT_CUISINE_TYPE = "Other";
 
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
-  const [restaurantImages, setRestaurantImages] = useState<string[]>([]);
-  const [menuImages, setMenuImages] = useState<string[]>([]);
-  const [profileImage, setProfileImage] = useState<string[]>([]);
+  const [restaurantImages, setRestaurantImages] = useState<{ key: string; previewUrl: string }[]>([]);
+  const [menuImages, setMenuImages] = useState<{ key: string; previewUrl: string }[]>([]);
+  const [profileImage, setProfileImage] = useState<{ key: string; previewUrl: string }[]>([]);
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState("");
@@ -132,7 +132,9 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       if (prev.length >= 3) {
         return prev;
       }
-      return [...prev, cuisineId];
+      const cuisineName = cuisines.find(c => c.id === cuisineId)?.name;
+      if (!cuisineName) return prev;
+      return [...prev, cuisineName];
     });
   };
 
@@ -153,52 +155,76 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-
-    // Ensure all days are included in opening times
-    const allDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-    const openingTimes = allDays.map((day) => {
-      const scheduleDay = Object.entries(schedule).find(([key]) =>
-        key.toUpperCase().startsWith(day)
-      );
-
-      if (!scheduleDay) {
+    
+    try {
+      // Validate required fields
+      if (profileImage.length === 0) {
+        throw new Error("Please upload a profile image");
+      }
+      
+      if (restaurantImages.length < 2) {
+        throw new Error("Please upload at least 2 restaurant images");
+      }
+      
+      if (menuImages.length === 0) {
+        throw new Error("Please upload at least one menu image");
+      }
+      
+      if (selectedCuisines.length !== 3) {
+        throw new Error("Please select exactly 3 cuisines");
+      }
+      
+      // Format opening times
+      const allDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+      const openingTimes = allDays.map((day) => {
+        const scheduleDay = Object.entries(schedule).find(([key]) =>
+          key.toUpperCase().startsWith(day)
+        );
+  
+        if (!scheduleDay) {
+          return {
+            day,
+            times: [],
+            isOpen: false,
+          };
+        }
+  
+        const [_, daySchedule] = scheduleDay;
         return {
           day,
-          times: [],
-          isOpen: false,
+          times: daySchedule.isOpen
+            ? [
+                {
+                  startTime: [daySchedule.openTime],
+                  endTime: [daySchedule.closeTime],
+                },
+              ]
+            : [],
+          isOpen: daySchedule.isOpen,
         };
-      }
-
-      const [_, daySchedule] = scheduleDay;
-      return {
-        day,
-        times: daySchedule.isOpen
-          ? [
-              {
-                startTime: [daySchedule.openTime],
-                endTime: [daySchedule.closeTime],
-              },
-            ]
-          : [],
-        isOpen: daySchedule.isOpen,
+      });
+  
+      // Prepare form data
+      const formData = {
+        profileImage: profileImage[0]?.key,
+        restaurantImages: restaurantImages.map(img => img.key),
+        menuImages: menuImages.map(img => img.key),
+        cuisines: selectedCuisines.map(id => id.replace('cuisine-', '')),
+        openingTimes,
       };
-    });
-    if (selectedCuisines.length !== 3) {
-      alert("Please select exactly 3 cuisines");
-      return;
-    }
-
-    const formData = {
-      profileImage: profileImage,
-      restaurantImages: restaurantImages,
-      menuImages: menuImages,
-      cuisines: selectedCuisines,
-      openingTimes,
-    };
-
-    if (validate(formData)) {
+      
+      console.log('Submitting form data:', formData);
+  
+      // Update application and move to next step
       updateApplication(formData);
       onNext();
+    } catch (error) {
+      console.error('Form submission error:', error);
+      if (error instanceof Error) {
+        alert(error.message);
+      } else {
+        alert("Please fill in all required fields");
+      }
     }
   };
 

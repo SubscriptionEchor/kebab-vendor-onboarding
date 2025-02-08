@@ -124,7 +124,7 @@ interface RestaurantInfoStepProps {
   onNext: () => void;
 }
 
-const RequiredLabel = ({ children }: { children: React.ReactNode }) => (
+export const RequiredLabel = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center gap-1 mb-1">
     <span className="text-sm font-medium text-gray-700">{children}</span>
     <Asterisk className="w-3 h-3 text-red-500" />
@@ -223,7 +223,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       // Remove leading zeros
       const normalizedPhone = cleanPhone.replace(/^0+/, '');
       // Add country code
-      const prefix = countryCode === 'IN' ? '+91' : '+49';
+      const prefix = countryCode === 'IN' ? '91' : '49';
       return `${prefix}${normalizedPhone}`;
     };
 
