@@ -1,15 +1,16 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { FileText, AlertCircle } from 'lucide-react';
+
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
 import { useFormValidation } from '../../../hooks/useFormValidation';
 import { validateDocument, validateBankAccount, validateBIC } from '../../../utils/validation';
 import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { Input } from '../../../components/ui/Input';
-import { ImageUpload } from '../../../components/ui/ImageUpload';
 import { SuccessDialog } from '../../../components/ui/SuccessDialog';
-import { FileText, AlertCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ImageUpload } from '../../../components/ui/ImageUpload';
 
 interface DocumentsStepProps {
   onBack: () => void;
@@ -29,20 +30,17 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const [errors, setErrors] = useState<string[]>([]);
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
   const { errors: validationErrors, validate, clearErrors } = useFormValidation({
-    hospitalityLicense: validateDocument,
-    registrationCertificate: validateDocument,
-    bankDocument: validateDocument,
-    taxDocument: validateDocument,
-    idCards: (images: string[]) => images?.length > 0,
-    bankAccount: validateBankAccount,
-    bankIdentifierCode: validateBIC,
+    // Only validate required documents
+    hospitalityLicense: (value: boolean) => value,
+    registrationCertificate: (value: boolean) => value,
+    idCards: (value: boolean) => value,
   });
   const [documents, setDocuments] = useState({
-    hospitalityLicense: [] as string[],
-    registrationCertificate: [] as string[],
-    bankDocument: [] as string[],
-    taxDocument: [] as string[],
-    idCards: [] as string[],
+    hospitalityLicense: [] as { key: string; previewUrl: string }[],
+    registrationCertificate: [] as { key: string; previewUrl: string }[],
+    bankDocument: [] as { key: string; previewUrl: string }[],
+    taxDocument: [] as { key: string; previewUrl: string }[],
+    idCards: [] as { key: string; previewUrl: string }[],
   });
 
   const [bankDetails, setBankDetails] = useState<BankDetails>({
@@ -54,65 +52,94 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   });
 
   const validateForm = useCallback(() => {
+    console.log('Validating form with documents:', documents);
+    
+    // Only validate required fields
     const validationData = {
       hospitalityLicense: documents.hospitalityLicense.length > 0,
       registrationCertificate: documents.registrationCertificate.length > 0,
       idCards: documents.idCards.length > 0
     };
     
-    const isValid = validate(validationData);
+    console.log('Validation data:', validationData);
     
-    if (!isValid) {
+    // Validate required fields
+    if (!validate(validationData)) {
       const newErrors: string[] = [];
       if (!validationData.hospitalityLicense) {
-        newErrors.push('Hospitality License is required');
+        newErrors.push('Please upload a Hospitality License');
       }
       if (!validationData.registrationCertificate) {
-        newErrors.push('Registration Certificate is required');
+        newErrors.push('Please upload a Registration Certificate');
       }
       if (!validationData.idCards) {
-        newErrors.push('ID Cards are required');
+        newErrors.push('Please upload at least one ID Card');
       }
       setErrors(newErrors);
       return false;
     }
     
-    return isValid;
+    return true;
   }, [documents, validate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
     setErrors([]);
+    console.log('Starting form submission');
+    console.log('Current documents state:', documents);
 
     if (validateForm()) {
+      console.log('Form validation passed');
       try {
-        // Update application with documents and bank details
-        updateApplication({
+        // Ensure we have the required documents
+        if (!documents.hospitalityLicense[0]?.key) {
+          throw new Error('Hospitality License is required');
+        }
+        if (!documents.registrationCertificate[0]?.key) {
+          throw new Error('Registration Certificate is required');
+        }
+        if (documents.idCards.length === 0) {
+          throw new Error('At least one ID Card is required');
+        }
+
+        const applicationData = {
           businessDocuments: {
-            hospitalityLicense: documents.hospitalityLicense[0] || '',
-            registrationCertificate: documents.registrationCertificate[0] || '',
+            hospitalityLicense: documents.hospitalityLicense[0]?.key,
+            registrationCertificate: documents.registrationCertificate[0]?.key,
             bankDetails: {
               ...bankDetails,
-              documentUrl: documents.bankDocument[0] || '',
+              documentUrl: documents.bankDocument[0]?.key,
             },
             taxId: {
               documentNumber: bankDetails?.bankIdentifierCode,
-              documentUrl: documents.taxDocument[0] || '',
+              documentUrl: documents.taxDocument[0]?.key,
             },
           },
-        });
+          beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
+            ...owner,
+            idCardDocuments: documents.idCards.map(doc => doc.key)
+          })) || []
+        };
+        
+        console.log('Updating application with:', applicationData);
+        await updateApplication(applicationData);
 
-        // Submit the application
+        console.log('Submitting application...');
         await submitApplication();
+        console.log('Application submitted successfully');
         setShowSuccess(true);
       } catch (error) {
+        console.error('Submission failed:', error);
         if (error instanceof Error) {
           setErrors([error.message]);
         } else {
           setErrors(['Failed to submit application. Please try again.']);
         }
       }
+    }
+    else {
+      console.log('Form validation failed');
     }
   };
 
@@ -164,7 +191,11 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       {errors.length > 0 && (
         <div className="space-y-2">
           {errors.map((error, index) => (
-            <ErrorAlert key={index} message={error} onClose={() => setErrors([])} />
+            <ErrorAlert
+              key={`error-${index}`}
+              message={error}
+              onClose={() => setErrors([])}
+            />
           ))}
         </div>
       )}
@@ -185,7 +216,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
         <div className="grid gap-6">
           {documentTypes.map((doc) => (
             <div
-              key={doc.key}
+              key={`doc-type-${doc.key}`}
               className="bg-white rounded-lg border border-gray-200 p-6"
             >
               <div className="flex items-start gap-4 mb-4">

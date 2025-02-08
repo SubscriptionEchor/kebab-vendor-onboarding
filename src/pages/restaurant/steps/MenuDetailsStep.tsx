@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { Clock, Search } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
-import { Clock, ChevronDown, Search } from 'lucide-react';
 import { Input } from '../../../components/ui/Input';
-import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { ImageUpload } from '../../../components/ui/ImageUpload';
 import { getCuisines } from '../../../services/restaurant';
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
@@ -25,42 +24,19 @@ interface DaySchedule {
 interface Cuisine {
   id: string;
   name: string;
-  description: string;
-  cuisine: string;
 }
 
 type WeekSchedule = {
   [key in 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday']: DaySchedule;
 };
 
-const defaultCuisines = [
-  { id: 'doner', name: 'Döner Kebab', description: 'Turkish-style meat in flatbread', cuisine: 'Turkish' },
-  { id: 'shawarma', name: 'Shawarma', description: 'Middle Eastern-style wrapped meat', cuisine: 'Middle Eastern' },
-  { id: 'gyros', name: 'Gyros', description: 'Greek-style meat with tzatziki', cuisine: 'Greek' },
-  { id: 'adana', name: 'Adana Kebab', description: 'Spicy minced meat kebab', cuisine: 'Turkish' },
-  { id: 'shish', name: 'Shish Kebab', description: 'Grilled meat on skewers', cuisine: 'Turkish' },
-  { id: 'beyti', name: 'Beyti Kebab', description: 'Wrapped ground meat in lavash', cuisine: 'Turkish' },
-  { id: 'iskender', name: 'İskender Kebab', description: 'Sliced döner on bread with sauce', cuisine: 'Turkish' },
-  { id: 'cag', name: 'Cağ Kebab', description: 'Horizontally stacked meat', cuisine: 'Turkish' },
-  { id: 'urfa', name: 'Urfa Kebab', description: 'Spiced ground lamb kebab', cuisine: 'Turkish' },
-  { id: 'alinazik', name: 'Alinazik Kebab', description: 'Grilled meat on smoky eggplant puree', cuisine: 'Turkish' },
-  { id: 'testi', name: 'Testi Kebab', description: 'Clay pot kebab', cuisine: 'Turkish' },
-  { id: 'kofta', name: 'Kofta Kebab', description: 'Spiced meatballs', cuisine: 'Middle Eastern' },
-  { id: 'seekh', name: 'Seekh Kebab', description: 'Spiced minced meat on skewers', cuisine: 'Indian' },
-  { id: 'chapli', name: 'Chapli Kebab', description: 'Flat spiced meat patties', cuisine: 'Pakistani' },
-  { id: 'shami', name: 'Shami Kebab', description: 'Minced meat with lentils', cuisine: 'Indian' },
-  { id: 'galouti', name: 'Galouti Kebab', description: 'Tender minced meat kebab', cuisine: 'Indian' },
-  { id: 'barg', name: 'Kabab Barg', description: 'Persian style grilled meat', cuisine: 'Persian' },
-  { id: 'koobideh', name: 'Koobideh Kebab', description: 'Ground meat kebab', cuisine: 'Persian' },
-  { id: 'joojeh', name: 'Joojeh Kebab', description: 'Persian chicken kebab', cuisine: 'Persian' },
-  { id: 'souvlaki', name: 'Souvlaki', description: 'Greek meat skewers', cuisine: 'Greek' }
-];
+const DEFAULT_CUISINE_TYPE = 'Other';
 
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [restaurantImages, setRestaurantImages] = useState<string[]>([]);
   const [menuImages, setMenuImages] = useState<string[]>([]);
   const [profileImage, setProfileImage] = useState<string[]>([]);
-  const [cuisines, setCuisines] = useState<Cuisine[]>(defaultCuisines);
+  const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState('');
   const [selectedCuisineType, setSelectedCuisineType] = useState<string>('all');
@@ -83,19 +59,50 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     sunday: { isOpen: true, openTime: '10:00', closeTime: '22:00' },
   });
 
-  const cuisineTypes = useMemo(() => 
-    ['all', ...new Set(cuisines.map(c => c.cuisine))].sort(),
-    [cuisines]
-  );
+  useEffect(() => {
+    const fetchCuisines = async () => {
+      setIsLoadingCuisines(true);
+      const seenNames = new Set();
+      try {
+        const response = await getCuisines();
+        console.log('Cuisine response:', response);
+        
+        if (response?.vendorOnboardingBootstrap?.cuisines) {
+          // Filter out duplicates and create unique IDs
+          const fetchedCuisines = response.vendorOnboardingBootstrap.cuisines
+            .filter(cuisine => {
+              if (seenNames.has(cuisine.name)) {
+                return false;
+              }
+              seenNames.add(cuisine.name);
+              return true;
+            })
+            .map(cuisine => ({
+              id: `cuisine-${cuisine.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+              name: cuisine.name
+            }));
+          console.log('Fetched cuisines:', fetchedCuisines);
+          setCuisines(fetchedCuisines);
+        } else {
+          throw new Error('No cuisines found');
+        }
+      } catch (error) {
+        console.error('Failed to fetch cuisines:', error);
+        setCuisines([]);
+      } finally {
+        setIsLoadingCuisines(false);
+      }
+    };
+
+    fetchCuisines();
+  }, []);
 
   const filteredCuisines = useMemo(() => 
     cuisines.filter(cuisine => {
-      const matchesSearch = cuisine.name.toLowerCase().includes(cuisineSearch.toLowerCase()) ||
-                           cuisine.description.toLowerCase().includes(cuisineSearch.toLowerCase());
-      const matchesCuisineType = selectedCuisineType === 'all' || cuisine.cuisine === selectedCuisineType;
-      return matchesSearch && matchesCuisineType;
+      const matchesSearch = cuisine.name.toLowerCase().includes(cuisineSearch.toLowerCase());
+      return matchesSearch;
     }),
-    [cuisines, cuisineSearch, selectedCuisineType]
+    [cuisines, cuisineSearch]
   );
 
   const handleCuisineToggle = (cuisineId: string) => {
@@ -127,6 +134,32 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    
+    // Ensure all days are included in opening times
+    const allDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const openingTimes = allDays.map(day => {
+      const scheduleDay = Object.entries(schedule).find(([key]) => 
+        key.toUpperCase().startsWith(day)
+      );
+      
+      if (!scheduleDay) {
+        return {
+          day,
+          times: [],
+          isOpen: false
+        };
+      }
+      
+      const [_, daySchedule] = scheduleDay;
+      return {
+        day,
+        times: daySchedule.isOpen ? [{
+          startTime: [daySchedule.openTime],
+          endTime: [daySchedule.closeTime]
+        }] : [],
+        isOpen: daySchedule.isOpen
+      };
+    });
     if (selectedCuisines.length !== 3) {
       alert('Please select exactly 3 cuisines');
       return;
@@ -137,7 +170,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       restaurantImages: restaurantImages,
       menuImages: menuImages,
       cuisines: selectedCuisines,
-      openingTimes: schedule,
+      openingTimes,
     };
 
     if (validate(formData)) {
@@ -214,18 +247,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
               />
             </div>
           </div>
-          <div className="w-48">
-            <select
-              value={selectedCuisineType}
-              onChange={(e) => setSelectedCuisineType(e.target.value)}
-              className="w-full h-full px-4 rounded-lg border border-gray-300 focus:border-brand-primary focus:ring-brand-primary"
-            >
-              <option value="all">All Cuisines</option>
-              {cuisineTypes.filter(type => type !== 'all').map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {isLoadingCuisines && (
@@ -259,11 +280,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-medium">{cuisine.name}</div>
-                      <div className="text-sm text-gray-600">{cuisine.description}</div>
                     </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                      {cuisine.cuisine}
-                    </span>
                   </div>
                 </button>
               ))}

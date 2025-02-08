@@ -14,17 +14,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (phone: string, countryCode: string) => {
     setIsLoading(true);
     try {
+      console.log('Attempting login for:', phone);
       const response = await sendPhoneOTP(phone);
       if (!response.sendPhoneOtpForOnboardingVendorLogin.result) {
         throw new Error(response.sendPhoneOtpForOnboardingVendorLogin.message);
       }
       
-      // Store token if provided in response
       if (response.sendPhoneOtpForOnboardingVendorLogin.token) {
         const token = response.sendPhoneOtpForOnboardingVendorLogin.token;
         localStorage.setItem('authToken', token);
         setAuthToken(token);
       }
+
       setUser({
         id: '1',
         email: '',
@@ -32,9 +33,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: `Restaurant Owner (${countryCode})`,
         role: 'owner',
       });
+      console.log('Login successful, OTP sent');
       return response.sendPhoneOtpForOnboardingVendorLogin.result;
     } catch (error) {
       console.error('Login failed:', error);
+      if (error instanceof Error) {
+        throw new Error(error.message || 'Failed to send verification code');
+      }
       throw error;
     } finally {
       setIsLoading(false);

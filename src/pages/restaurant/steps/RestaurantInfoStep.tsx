@@ -216,6 +216,17 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     e.preventDefault();
     clearErrors();
 
+    // Format phone numbers to E.164
+    const formatPhoneNumber = (phone: string, countryCode: string) => {
+      // Remove all non-digit characters
+      const cleanPhone = phone.replace(/\D/g, '');
+      // Remove leading zeros
+      const normalizedPhone = cleanPhone.replace(/^0+/, '');
+      // Add country code
+      const prefix = countryCode === 'IN' ? '+91' : '+49';
+      return `${prefix}${normalizedPhone}`;
+    };
+
     const validationData = {
       companyName: formData.companyName,
       restaurantName: formData.restaurantName,
@@ -229,12 +240,16 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     };
 
     if (validate(validationData)) {
+      // Format phone numbers for API submission
+      const formattedOwnerPhone = formatPhoneNumber(formData.phone, formData.countryCode);
+      const formattedRestaurantPhone = formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode);
+      
       const applicationData = {
         companyName: formData.companyName,
         restaurantName: formData.restaurantName,
         restaurantContactInfo: {
           email: formData.restaurantEmail,
-          phone: formData.restaurantPhone,
+          phone: formattedRestaurantPhone,
         },
         location: {
           coordinates: {

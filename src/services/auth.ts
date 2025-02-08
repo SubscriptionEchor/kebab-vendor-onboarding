@@ -57,16 +57,29 @@ const VERIFY_EMAIL_OTP = `
 `;
 
 export async function sendPhoneOTP(phoneNumber: string) {
-  return graphqlRequest<SendPhoneOTPResponse>(SEND_PHONE_OTP, { phoneNumber });
+  console.log('Sending phone OTP for:', phoneNumber);
+  try {
+    return graphqlRequest<SendPhoneOTPResponse>(SEND_PHONE_OTP, { phoneNumber });
+  } catch (error) {
+    console.error('Failed to send OTP:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to send verification code: ${error.message}`);
+    }
+    throw new Error('Failed to send verification code. Please try again.');
+  }
 }
 
 export async function verifyPhoneOTP(phoneNumber: string, otp: string) {
+  console.log('Verifying phone OTP for:', phoneNumber);
   try {
-  return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { phoneNumber, otp });
+    return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { phoneNumber, otp });
   } catch (error) {
     console.error('Phone verification failed:', error);
     if (error instanceof Error) {
-      throw new Error(error.message || 'Phone verification failed');
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        throw new Error('Session expired. Please try again.');
+      }
+      throw new Error(error.message || 'Invalid verification code');
     }
     throw new Error('Phone verification failed. Please try again.');
   }

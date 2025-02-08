@@ -94,5 +94,19 @@ export async function uploadDocument(restaurantId: string, type: string, file: F
 }
 
 export async function getCuisines() {
-  return graphqlRequest<GetCuisinesResponse>(GET_CUISINES);
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    throw new Error('Please log in to continue');
+  }
+
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+    'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+    'Priority': 'u=1, i'
+  };
+
+  return graphqlRequest<GetCuisinesResponse>(GET_CUISINES, {}, headers);
 }

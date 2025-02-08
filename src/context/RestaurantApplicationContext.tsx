@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useToast } from './ToastContext';
 import type { RestaurantApplication, RestaurantApplicationContextType, RestaurantApplicationResponse } from '../types/restaurant';
 import { graphqlRequest } from '../services/api';
 
@@ -7,8 +8,8 @@ const CREATE_APPLICATION = `
   mutation CreateApplication($input: RestaurantOnboardingApplicationInput!) {
     createRestaurantOnboardingApplication(input: $input) {
       _id
-      resubmissionCount
       applicationStatus
+      resubmissionCount
       restaurantName
       createdAt
     }
@@ -56,8 +57,8 @@ const defaultApplication: RestaurantApplication = {
     { day: 'WED', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
     { day: 'THU', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
     { day: 'FRI', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'SAT', isOpen: false },
-    { day: 'SUN', isOpen: false },
+    { day: 'SAT', times: [], isOpen: false },
+    { day: 'SUN', times: [], isOpen: false },
   ],
   businessDocuments: {
     hospitalityLicense: '',
@@ -80,6 +81,7 @@ const defaultApplication: RestaurantApplication = {
 const RestaurantApplicationContext = createContext<RestaurantApplicationContextType | null>(null);
 
 export function RestaurantApplicationProvider({ children }: { children: React.ReactNode }) {
+  const { showToast } = useToast();
   const [application, setApplication] = useLocalStorage<RestaurantApplication | null>(
     'restaurantApplication',
     defaultApplication
@@ -98,46 +100,63 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   }, [application]);
 
   const updateApplication = (data: Partial<RestaurantApplication>) => {
+    console.log('Updating application with:', data);
     setApplication(prev => {
-      if (!prev) return { ...defaultApplication, ...data };
-      return { ...prev, ...data };
+      if (!prev) {
+        const newApplication = { ...defaultApplication, ...data };
+        console.log('Creating new application:', newApplication);
+        return newApplication;
+      }
+
+      const updatedApplication = {
+        ...prev,
+        ...data,
+        openingTimes: Array.isArray(data.openingTimes) ? data.openingTimes : prev.openingTimes || []
+      };
+      console.log('Updated application state:', updatedApplication);
+      return updatedApplication;
     });
   };
 
   const resetApplication = () => {
+    console.log('Resetting application state');
     setApplication(null);
     window.localStorage.removeItem('restaurantApplication');
   };
 
   const submitApplication = async (): Promise<RestaurantApplicationResponse> => {
     if (!application) {
+      console.error('No application data to submit');
       throw new Error('No application data to submit');
     }
 
     const token = localStorage.getItem('authToken');
     if (!token) {
+      console.error('Authentication token not found');
       throw new Error('Authentication required');
     }
 
+    console.log('Submitting application:', application);
     const headers = {
       'Authorization': `Bearer ${token}`,
-      'accept': '*/*',
-      'accept-language': 'en-US,en;q=0.9',
-      'content-type': 'application/json',
-      'origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
-      'priority': 'u=1, i',
-      'referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/'
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+      'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+      'Priority': 'u=1, i'
     };
 
     // Format the application data according to the API requirements
     const input = {
-      beneficialOwners: application.beneficialOwners.map(owner => ({
+      beneficialOwners: (application.beneficialOwners || []).map(owner => ({
         name: owner.name || '',
         passportId: owner.passportId || '',
         email: owner.email || '',
         phone: owner.phone || '',
         isPrimary: owner.isPrimary || false,
-        idCardDocuments: owner.idCardDocuments || []
+        idCardDocuments: Array.isArray(owner.idCardDocuments) 
+          ? owner.idCardDocuments.map(doc => typeof doc === 'string' ? doc : doc.key).filter(Boolean)
+          : []
       })),
       companyName: application.companyName,
       restaurantName: application.restaurantName,
@@ -149,27 +168,52 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         coordinates: application.location.coordinates,
         address: application.location.address
       },
-      restaurantImages: application.restaurantImages.map(img => img.key || ''),
-      menuImages: application.menuImages.map(img => img.key || ''),
-      profileImage: application.profileImage || '',
-      cuisines: application.cuisines,
-      openingTimes: application.openingTimes.map(time => ({
+      restaurantImages: Array.isArray(application.restaurantImages)
+        ? application.restaurantImages.map(img => typeof img === 'string' ? img : img.key).filter(Boolean)
+        : [],
+      menuImages: Array.isArray(application.menuImages)
+        ? application.menuImages.map(img => typeof img === 'string' ? img : img.key).filter(Boolean)
+        : [],
+      profileImage: typeof application.profileImage === 'string' 
+        ? application.profileImage 
+        : application.profileImage?.key || '',
+      cuisines: Array.isArray(application.cuisines) ? application.cuisines.map(cuisine => cuisine.id || cuisine).filter(Boolean) : [],
+      openingTimes: Array.isArray(application.openingTimes) ? application.openingTimes.map(time => ({
         day: time.day,
         isOpen: time.isOpen,
-        times: time.isOpen && time.times?.[0] ? [{
-          startTime: [time.times[0].startTime[0] || ''],
-          endTime: [time.times[0].endTime[0] || '']
-        }] : []
-      })),
+        times: time.isOpen && time.times && time.times[0] ? [
+          {
+            startTime: time.times[0].startTime || [],
+            endTime: time.times[0].endTime || []
+          }
+        ] : []
+      })) : [],
       businessDocuments: {
-        hospitalityLicense: application.businessDocuments.hospitalityLicense,
-        registrationCertificate: application.businessDocuments.registrationCertificate,
+        hospitalityLicense: typeof application.businessDocuments.hospitalityLicense === 'string'
+          ? application.businessDocuments.hospitalityLicense
+          : application.businessDocuments.hospitalityLicense?.key || '',
+        registrationCertificate: typeof application.businessDocuments.registrationCertificate === 'string'
+          ? application.businessDocuments.registrationCertificate
+          : application.businessDocuments.registrationCertificate?.key || '',
+        bankDetails: {
+          accountNumber: application.businessDocuments.bankDetails.accountNumber,
+          bankName: application.businessDocuments.bankDetails.bankName,
+          branchName: application.businessDocuments.bankDetails.branchName,
+          bankIdentifierCode: application.businessDocuments.bankDetails.bankIdentifierCode,
+          accountHolderName: application.businessDocuments.bankDetails.accountHolderName,
+          documentUrl: typeof application.businessDocuments.bankDetails.documentUrl === 'string'
+            ? application.businessDocuments.bankDetails.documentUrl
+            : application.businessDocuments.bankDetails.documentUrl?.key || ''
+        },
         taxId: {
-          documentNumber: application.businessDocuments.taxId.documentNumber || 'default',
-          documentUrl: application.businessDocuments.taxId.documentUrl
+          documentNumber: application.businessDocuments.taxId.documentNumber,
+          documentUrl: typeof application.businessDocuments.taxId.documentUrl === 'string'
+            ? application.businessDocuments.taxId.documentUrl
+            : application.businessDocuments.taxId.documentUrl?.key || ''
         }
-      }
+      },
     };
+    console.log('Formatted input for submission:', input);
 
     try {
       const response = await graphqlRequest<{ createRestaurantOnboardingApplication: RestaurantApplicationResponse }>(
@@ -179,6 +223,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       );
 
       console.log('Application submitted successfully:', response);
+      showToast('Application submitted successfully!', 'success');
 
       // Clear the stored application data after successful submission
       resetApplication();

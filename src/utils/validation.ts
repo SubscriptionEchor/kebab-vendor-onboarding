@@ -4,11 +4,12 @@ export function validateEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-// Phone validation
+// Phone number validation
 export function validatePhone(phone: string): boolean {
-  // Basic phone validation - can be made more strict based on requirements
-  const phoneRegex = /^\d{6,15}$/;
-  return phoneRegex.test(phone.replace(/\D/g, ''));
+  // Remove all non-digit characters
+  const cleanPhone = phone.replace(/\D/g, '');
+  // Allow 10-12 digits for phone numbers
+  return /^\d{10,12}$/.test(cleanPhone);
 }
 
 // OTP validation
