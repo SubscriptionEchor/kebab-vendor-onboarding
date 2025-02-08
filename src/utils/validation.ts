@@ -8,8 +8,11 @@ export function validateEmail(email: string): boolean {
 export function validatePhone(phone: string): boolean {
   // Remove all non-digit characters
   const cleanPhone = phone.replace(/\D/g, '');
-  // Allow 10-12 digits for phone numbers
-  return /^\d{10,12}$/.test(cleanPhone);
+  
+  // Check if the number has valid length
+  // Indian numbers: 10 digits
+  // German numbers: 10-11 digits
+  return cleanPhone.length >= 10 && cleanPhone.length <= 11;
 }
 
 // OTP validation

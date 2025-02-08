@@ -8,6 +8,7 @@ export interface BeneficialOwner {
   passportId: string;
   email: string;
   phone: string;
+  countryCode: string;
   isPrimary: boolean;
   idCardDocuments: string[];
 }
@@ -15,6 +16,7 @@ export interface BeneficialOwner {
 export interface RestaurantContactInfo {
   email: string;
   phone: string;
+  countryCode: string;
 }
 
 export interface Location {

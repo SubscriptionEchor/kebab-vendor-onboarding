@@ -31,11 +31,14 @@ export async function graphqlRequest<T>(
       variables: variables || {},
     });
 
-    console.debug('GraphQL Request:', {
-      url: API_CONFIG.BASE_URL,
-      headers: requestHeaders,
-      body: requestBody,
-    });
+    // Log request details only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('GraphQL Request:', {
+        url: API_CONFIG.BASE_URL,
+        headers: requestHeaders,
+        body: requestBody,
+      });
+    }
 
     const response = await fetch(API_CONFIG.BASE_URL, {
       method: 'POST',
@@ -46,35 +49,49 @@ export async function graphqlRequest<T>(
 
     if (!response.ok) {
       const errorResponse = await response.text();
-      console.error('GraphQL Error Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorResponse
-      });
+      let errorMessage = `Request failed with status ${response.status}`;
       
       if (response.status === 401) {
         throw new Error('Session expired. Please log in again.');
+      } else if (response.status === 400) {
+        try {
+          const errorData = JSON.parse(errorResponse);
+          if (errorData.errors?.[0]?.message) {
+            errorMessage = errorData.errors[0].message;
+          }
+        } catch (e) {
+          // If parsing fails, use the raw error response
+          errorMessage = errorResponse;
+        }
       }
       
-      throw new Error(
-        `Request failed with status ${response.status}: ${errorResponse}`
-      );
+      throw new Error(errorMessage);
     }
 
     const result = await response.json() as APIResponse<T>;
-    console.debug('GraphQL Response:', result);
+    
+    // Log response only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('GraphQL Response:', result);
+    }
 
     if (result.errors) {
       const errorMessage = result.errors[0]?.message || 'An error occurred';
       if (errorMessage.toLowerCase().includes('unauthorized')) {
         throw new Error('Please log in again to continue');
       }
+      // Format validation errors nicely
+      if (errorMessage.includes('validation failed')) {
+        const validationErrors = result.errors
+          .map(error => error.message)
+          .join('. ');
+        throw new Error(`Validation failed: ${validationErrors}`);
+      }
       throw new Error(errorMessage);
     }
 
     return result.data;
   } catch (error) {
-    console.error('GraphQL Request Failed:', error);
     if (error instanceof APIError) {
       throw error;
     } else if (error instanceof Error) {

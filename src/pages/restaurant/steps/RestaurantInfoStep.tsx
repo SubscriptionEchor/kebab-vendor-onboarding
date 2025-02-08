@@ -19,6 +19,7 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+import { DEFAULT_LOCATION, COUNTRY_CODES } from '../../../config/defaults';
 
 interface Location {
   lat: number;
@@ -154,8 +155,8 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       country: 'Germany',
     },
     location: {
-      lat: 52.520008, // Berlin coordinates as default
-      lng: 13.404954,
+      lat: DEFAULT_LOCATION.lat,
+      lng: DEFAULT_LOCATION.lng,
     },
     
     // Owner Details
@@ -211,28 +212,79 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   };
 
   const { application, updateApplication } = useRestaurantApplication();
+  
+  // Initialize form data from application context
+  useEffect(() => {
+    if (application) {
+      setFormData(prev => ({
+        ...prev,
+        companyName: application.companyName || '',
+        restaurantName: application.restaurantName || '',
+        restaurantEmail: application.restaurantContactInfo?.email || '',
+        restaurantPhone: application.restaurantContactInfo?.phone || '',
+        address: {
+          ...prev.address,
+          street: application.location?.address?.split(',')[0] || '',
+          city: application.location?.address?.split(',')[1]?.trim() || '',
+        },
+        location: {
+          lat: application.location?.coordinates?.coordinates[1] || 52.520008,
+          lng: application.location?.coordinates?.coordinates[0] || 13.404954,
+        }
+      }));
+
+      // Restore beneficial owners
+      if (application.beneficialOwners?.length) {
+        const primaryOwner = application.beneficialOwners.find(owner => owner.isPrimary);
+        const otherOwners = application.beneficialOwners.filter(owner => !owner.isPrimary);
+
+        if (primaryOwner) {
+          setFormData(prev => ({
+            ...prev,
+            ownerName: primaryOwner.name || '',
+            passportId: primaryOwner.passportId || '',
+            email: primaryOwner.email || '',
+            phone: primaryOwner.phone || '',
+            hasMultipleOwners: otherOwners.length > 0
+          }));
+        }
+
+        if (otherOwners.length) {
+          setAdditionalOwners(
+            otherOwners.map(owner => ({
+              id: crypto.randomUUID(),
+              firstName: owner.name?.split(' ')[0] || '',
+              lastName: owner.name?.split(' ').slice(1).join(' ') || '',
+              passportId: owner.passportId || '',
+              email: owner.email || '',
+              phone: owner.phone || '',
+              countryCode: 'DE'
+            }))
+          );
+        }
+      }
+    }
+  }, [application]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-
-    // Format phone numbers to E.164
-    const formatPhoneNumber = (phone: string, countryCode: string) => {
-      // Remove all non-digit characters
-      const cleanPhone = phone.replace(/\D/g, '');
-      // Remove leading zeros
-      const normalizedPhone = cleanPhone.replace(/^0+/, '');
-      // Add country code
-      const prefix = countryCode === 'IN' ? '91' : '49';
-      return `${prefix}${normalizedPhone}`;
-    };
+    
+    // Format address into a single string
+    const formattedAddress = [
+      formData.address.street,
+      formData.address.number,
+      formData.address.postalCode,
+      formData.address.city,
+      formData.address.country
+    ].filter(Boolean).join(', ');
 
     const validationData = {
       companyName: formData.companyName,
       restaurantName: formData.restaurantName,
       restaurantEmail: formData.restaurantEmail,
       restaurantPhone: formData.restaurantPhone,
-      address: `${formData.address.street} ${formData.address.number}, ${formData.address.postalCode} ${formData.address.city}`,
+      address: formattedAddress,
       ownerName: formData.ownerName,
       passportId: formData.passportId,
       email: formData.email,
@@ -240,41 +292,70 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     };
 
     if (validate(validationData)) {
-      // Format phone numbers for API submission
-      const formattedOwnerPhone = formatPhoneNumber(formData.phone, formData.countryCode);
-      const formattedRestaurantPhone = formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode);
-      
+      // Helper function to format phone numbers correctly
+      function formatPhoneNumber(phone: string, countryCode: string): string {
+        // Remove all non-digit characters and leading zeros
+        let digits = phone.replace(/\D/g, '').replace(/^0+/, '');
+        
+        // Remove existing country code if present
+        const germanPrefix = '49';
+        const indianPrefix = '91';
+        if (digits.startsWith(germanPrefix) && countryCode === 'DE') {
+          digits = digits.substring(2);
+        } else if (digits.startsWith(indianPrefix) && countryCode === 'IN') {
+          digits = digits.substring(2);
+        }
+        
+        // For Indian numbers, ensure exactly 10 digits
+        if (countryCode === 'IN') {
+          digits = digits.slice(-10);
+        }
+        
+        // Add the appropriate country code prefix
+        return `+${countryCode === 'IN' ? indianPrefix : germanPrefix}${digits}`;
+      }
+
+      // Format phone numbers for additional owners
+      const formattedAdditionalOwners = additionalOwners.map(owner => ({
+        name: `${owner.firstName} ${owner.lastName}`,
+        passportId: owner.passportId,
+        email: owner.email,
+        phone: formatPhoneNumber(owner.phone, owner.countryCode),
+        isPrimary: false,
+        idCardDocuments: [],
+      }));
+
       const applicationData = {
         companyName: formData.companyName,
         restaurantName: formData.restaurantName,
+        // Format restaurant contact info
         restaurantContactInfo: {
-          email: formData.restaurantEmail,
-          phone: formattedRestaurantPhone,
+          email: formData.restaurantEmail.trim(),
+          phone: formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode),
+          countryCode: formData.restaurantCountryCode === 'DE' ? '49' : '91',
         },
         location: {
           coordinates: {
             type: 'Point' as const,
-            coordinates: [formData.location.lng, formData.location.lat],
+            // Ensure coordinates are properly rounded to 6 decimal places
+            coordinates: [
+              parseFloat(formData.location.lng.toFixed(6)),
+              parseFloat(formData.location.lat.toFixed(6))
+            ]
           },
-          address: `${formData.address.street} ${formData.address.number}, ${formData.address.postalCode} ${formData.address.city}`,
+          address: formattedAddress.trim(),
         },
         beneficialOwners: [
           {
             name: formData.ownerName,
-            passportId: formData.passportId,
-            email: formData.email,
-            phone: formData.phone,
+            passportId: formData.passportId.trim(),
+            email: formData.email.trim(),
+            phone: formatPhoneNumber(formData.phone, formData.countryCode),
+            countryCode: formData.countryCode === 'DE' ? '49' : '91',
             isPrimary: true,
             idCardDocuments: [],
           },
-          ...additionalOwners.map(owner => ({
-            name: `${owner.firstName} ${owner.lastName}`,
-            passportId: owner.passportId,
-            email: owner.email,
-            phone: owner.phone,
-            isPrimary: false,
-            idCardDocuments: [],
-          })),
+          ...formattedAdditionalOwners,
         ],
       };
 
@@ -646,12 +727,16 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
                 onLocationSelect={(location) => {
                   setFormData({
                     ...formData,
-                    location: { lat: location.lat, lng: location.lng },
+                    location: {
+                      lat: parseFloat(location.lat.toFixed(6)),
+                      lng: parseFloat(location.lng.toFixed(6))
+                    },
                     address: {
                       ...formData.address,
                       ...(location.address ? { 
-                        street: location.address.split(',')[0],
-                        city: location.address.split(',')[1]?.trim() || '',
+                        street: location.address.split(',')[0]?.trim() || '',
+                        city: location.address.split(',')[1]?.trim() || formData.address.city,
+                        country: 'Germany'
                       } : {})
                     }
                   });
@@ -664,9 +749,13 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
                   dragend: (e) => {
                     const marker = e.target;
                     const position = marker.getLatLng();
+                    // Round coordinates to 6 decimal places
                     setFormData({
                       ...formData,
-                      location: { lat: position.lat, lng: position.lng }
+                      location: {
+                        lat: parseFloat(position.lat.toFixed(6)),
+                        lng: parseFloat(position.lng.toFixed(6))
+                      }
                     });
                   },
                 }}

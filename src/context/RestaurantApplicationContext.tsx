@@ -31,6 +31,7 @@ import {
   validateImage,
   validateLocation
 } from '../utils/validation';
+import { DEFAULT_LOCATION, DEFAULT_BUSINESS_HOURS } from '../config/defaults';
 
 const defaultApplication: RestaurantApplication = {
   beneficialOwners: [],
@@ -39,11 +40,12 @@ const defaultApplication: RestaurantApplication = {
   restaurantContactInfo: {
     email: '',
     phone: '',
+    countryCode: 'DE',
   },
   location: {
     coordinates: {
       type: 'Point',
-      coordinates: [13.404954, 52.520008], // Default to Berlin
+      coordinates: [DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat],
     },
     address: '',
   },
@@ -127,114 +129,181 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   const submitApplication = async (): Promise<RestaurantApplicationResponse> => {
     if (!application) {
       console.error('No application data to submit');
-      throw new Error('No application data to submit');
+      throw new Error('Please fill in all required information before submitting.');
     }
 
     const token = localStorage.getItem('authToken');
     if (!token) {
       console.error('Authentication token not found');
-      throw new Error('Authentication required');
+      throw new Error('Your session has expired. Please log in again.');
+    }
+
+    // Validate required fields
+    const requiredFields = {
+      'Restaurant Name': application.restaurantName,
+      'Company Name': application.companyName?.trim(),
+      'Restaurant Email': application.restaurantContactInfo.email,
+      'Restaurant Phone': application.restaurantContactInfo.phone,
+      'Restaurant Address': application.location.address,
+      'Restaurant Images': application.restaurantImages?.length >= 2,
+      'Menu Images': application.menuImages?.length >= 1,
+      'Profile Image': application.profileImage,
+      'Cuisines': application.cuisines?.length === 3,
+      'Business Documents': application.businessDocuments.hospitalityLicense &&
+                          application.businessDocuments.registrationCertificate,
+      'Opening Hours': application.openingTimes?.length === 7,
+      'Primary Owner': application.beneficialOwners?.some(owner => owner.isPrimary),
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([field]) => field);
+
+    if (missingFields.length > 0) {
+      throw new Error(`Please complete all required fields: ${missingFields.join(', ')}`);
     }
 
     console.log('Submitting application:', application);
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
-      'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
-      'Priority': 'u=1, i'
-    };
-
-    // Format the application data according to the API requirements
-    const input = {
-      beneficialOwners: (application.beneficialOwners || []).map(owner => ({
-        name: owner.name || '',
-        passportId: owner.passportId || '',
-        email: owner.email || '',
-        phone: owner.phone || '',
-        isPrimary: owner.isPrimary || false,
-        idCardDocuments: Array.isArray(owner.idCardDocuments) 
-          ? owner.idCardDocuments.map(doc => typeof doc === 'string' ? doc : doc.key).filter(Boolean)
-          : []
-      })),
-      companyName: application.companyName,
-      restaurantName: application.restaurantName,
-      restaurantContactInfo: {
-        email: application.restaurantContactInfo.email || '',
-        phone: application.restaurantContactInfo.phone || ''
-      },
-      location: {
-        coordinates: application.location.coordinates,
-        address: application.location.address
-      },
-      restaurantImages: Array.isArray(application.restaurantImages)
-        ? application.restaurantImages.map(img => typeof img === 'string' ? img : img.key).filter(Boolean)
-        : [],
-      menuImages: Array.isArray(application.menuImages)
-        ? application.menuImages.map(img => typeof img === 'string' ? img : img.key).filter(Boolean)
-        : [],
-      profileImage: typeof application.profileImage === 'string' 
-        ? application.profileImage 
-        : application.profileImage?.key || '',
-      cuisines: Array.isArray(application.cuisines) ? application.cuisines.map(cuisine => cuisine.id || cuisine).filter(Boolean) : [],
-      openingTimes: Array.isArray(application.openingTimes) ? application.openingTimes.map(time => ({
-        day: time.day,
-        isOpen: time.isOpen,
-        times: time.isOpen && time.times && time.times[0] ? [
-          {
-            startTime: time.times[0].startTime || [],
-            endTime: time.times[0].endTime || []
-          }
-        ] : []
-      })) : [],
-      businessDocuments: {
-        hospitalityLicense: typeof application.businessDocuments.hospitalityLicense === 'string'
-          ? application.businessDocuments.hospitalityLicense
-          : application.businessDocuments.hospitalityLicense?.key || '',
-        registrationCertificate: typeof application.businessDocuments.registrationCertificate === 'string'
-          ? application.businessDocuments.registrationCertificate
-          : application.businessDocuments.registrationCertificate?.key || '',
-        bankDetails: {
-          accountNumber: application.businessDocuments.bankDetails.accountNumber,
-          bankName: application.businessDocuments.bankDetails.bankName,
-          branchName: application.businessDocuments.bankDetails.branchName,
-          bankIdentifierCode: application.businessDocuments.bankDetails.bankIdentifierCode,
-          accountHolderName: application.businessDocuments.bankDetails.accountHolderName,
-          documentUrl: typeof application.businessDocuments.bankDetails.documentUrl === 'string'
-            ? application.businessDocuments.bankDetails.documentUrl
-            : application.businessDocuments.bankDetails.documentUrl?.key || ''
-        },
-        taxId: {
-          documentNumber: application.businessDocuments.taxId.documentNumber,
-          documentUrl: typeof application.businessDocuments.taxId.documentUrl === 'string'
-            ? application.businessDocuments.taxId.documentUrl
-            : application.businessDocuments.taxId.documentUrl?.key || ''
-        }
-      },
-    };
-    console.log('Formatted input for submission:', input);
-
     try {
+      // Format application data for API submission
+      const applicationInput = {
+        beneficialOwners: application.beneficialOwners.map(owner => ({
+          name: owner.name,
+          passportId: owner.passportId,
+          email: owner.email,
+          phone: formatPhoneNumber(owner.phone, owner.countryCode),
+          countryCode: owner.countryCode === 'IN' ? '91' : '49',
+          isPrimary: owner.isPrimary,
+          idCardDocuments: Array.isArray(owner.idCardDocuments) 
+            ? owner.idCardDocuments.map(doc => typeof doc === 'string' ? doc : doc.key)
+            : []
+        })),
+        companyName: application.companyName.trim(),
+        restaurantName: application.restaurantName.trim(),
+        restaurantContactInfo: {
+          email: application.restaurantContactInfo.email.trim(),
+          phone: formatPhoneNumber(
+            application.restaurantContactInfo.phone,
+            application.restaurantContactInfo.countryCode || 'DE'
+          ),
+          countryCode: application.restaurantContactInfo.countryCode === 'IN' ? '91' : '49'
+        },
+        location: {
+          coordinates: {
+            type: 'Point' as const,
+            coordinates: [
+              parseFloat(application.location.coordinates.coordinates[0].toFixed(6)),
+              parseFloat(application.location.coordinates.coordinates[1].toFixed(6))
+            ]
+          },
+          address: application.location.address.trim()
+        },
+        restaurantImages: application.restaurantImages
+          .map(img => typeof img === 'string' ? img : img.key)
+          .filter(Boolean),
+        menuImages: application.menuImages
+          .map(img => typeof img === 'string' ? img : img.key)
+          .filter(Boolean),
+        profileImage: typeof application.profileImage === 'string'
+          ? application.profileImage
+          : application.profileImage?.key || '',
+        cuisines: application.cuisines.map(cuisine => 
+          typeof cuisine === 'string' ? cuisine.trim() : cuisine.name.trim()
+        ),
+        openingTimes: application.openingTimes.map(time => ({
+          day: time.day,
+          isOpen: time.isOpen,
+          times: time.isOpen && time.times && time.times[0] ? [
+            {
+              startTime: time.times[0].startTime,
+              endTime: time.times[0].endTime
+            }
+          ] : []
+        })),
+        businessDocuments: {
+          hospitalityLicense: getDocumentKey(application.businessDocuments.hospitalityLicense),
+          registrationCertificate: getDocumentKey(application.businessDocuments.registrationCertificate),
+          bankDetails: {
+            ...application.businessDocuments.bankDetails,
+            documentUrl: getDocumentKey(application.businessDocuments.bankDetails.documentUrl)
+          },
+          taxId: {
+            ...application.businessDocuments.taxId,
+            documentUrl: getDocumentKey(application.businessDocuments.taxId.documentUrl)
+          }
+        }
+      };
+
+      // Helper function to format phone numbers
+      function formatPhoneNumber(phone: string, countryCode: string): string {
+        const cleanPhone = phone.replace(/\D/g, '');
+        // Remove any existing country code if present
+        let normalizedPhone = cleanPhone;
+        if (countryCode === 'DE' && normalizedPhone.startsWith('49')) {
+          normalizedPhone = normalizedPhone.substring(2);
+        } else if (countryCode === 'IN' && normalizedPhone.startsWith('91')) {
+          normalizedPhone = normalizedPhone.substring(2);
+        }
+        
+        // Remove leading zeros
+        normalizedPhone = normalizedPhone.replace(/^0+/, '');
+        
+        // For Indian numbers, ensure exactly 10 digits
+        if (countryCode === 'IN' && normalizedPhone.length > 10) {
+          normalizedPhone = normalizedPhone.slice(-10);
+        }
+        
+        // Format according to E.164 standard
+        const prefix = countryCode === 'IN' ? '91' : '49';
+        return `+${prefix}${normalizedPhone}`;
+      }
+
+      // Helper function to get document key
+      function getDocumentKey(doc: string | { key: string }): string {
+        if (!doc) return '';
+        return typeof doc === 'string' ? doc : doc.key || '';
+      }
+
+      console.log('Formatted application data:', applicationInput);
+
       const response = await graphqlRequest<{ createRestaurantOnboardingApplication: RestaurantApplicationResponse }>(
         CREATE_APPLICATION,
-        { input },
-        headers
+        { input: applicationInput },
+        {
+          'Authorization': `Bearer ${token}`,
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+          'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+          'Priority': 'u=1, i'
+        }
       );
 
-      console.log('Application submitted successfully:', response);
       showToast('Application submitted successfully!', 'success');
-
-      // Clear the stored application data after successful submission
       resetApplication();
-
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
-      console.error('Failed to submit application:', error);
+      console.error('Submission failed:', error);
+      let errorMessage = 'Failed to submit application. ';
+      
       if (error instanceof Error) {
-        throw new Error(`Failed to submit application: ${error.message}`);
+        if (error.message.includes('validation')) {
+          errorMessage += 'Please check all required fields are filled correctly.';
+        } else if (error.message.includes('401')) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          window.location.href = '/login';
+        } else if (error.message.includes('unauthorized')) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          window.location.href = '/login';
+        } else {
+          errorMessage += error.message;
+        }
+      } else {
+        errorMessage += 'An unexpected error occurred.';
       }
-      throw error;
+      
+      showToast(errorMessage, 'error');
+      throw new Error(errorMessage);
     }
   };
 

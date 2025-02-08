@@ -13,6 +13,7 @@ import {
   validateCuisines,
   validateOpeningHours,
 } from "../../../utils/validation";
+import { DEFAULT_BUSINESS_HOURS } from '../../../config/defaults';
 
 interface MenuDetailsStepProps {
   onNext: () => void;
@@ -50,9 +51,50 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState("");
-  const [selectedCuisineType, setSelectedCuisineType] = useState<string>("all");
   const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
   const { application, updateApplication } = useRestaurantApplication();
+  
+  // Initialize form data from application context
+  useEffect(() => {
+    if (application) {
+      // Restore profile image
+      if (application.profileImage) {
+        setProfileImage([{ key: application.profileImage, previewUrl: application.profileImage }]);
+      }
+      
+      // Restore restaurant images
+      if (application.restaurantImages?.length) {
+        setRestaurantImages(
+          application.restaurantImages.map(img => ({
+            key: typeof img === 'string' ? img : img.key,
+            previewUrl: typeof img === 'string' ? img : img.previewUrl
+          }))
+        );
+      }
+      
+      // Restore menu images
+      if (application.menuImages?.length) {
+        setMenuImages(
+          application.menuImages.map(img => ({
+            key: typeof img === 'string' ? img : img.key,
+            previewUrl: typeof img === 'string' ? img : img.previewUrl
+          }))
+        );
+      }
+      
+      // Restore cuisines
+      if (application.cuisines?.length) {
+        setSelectedCuisines(application.cuisines);
+      }
+    }
+  }, [application]);
+  
+  // Initialize selected cuisines from application state
+  useEffect(() => {
+    if (application?.cuisines) {
+      setSelectedCuisines(application.cuisines);
+    }
+  }, [application]);
   const { errors, validate, clearErrors } = useFormValidation({
     profileImage: validateImage,
     restaurantImages: (images) => images.length >= 2 && images.length <= 4,
@@ -64,13 +106,13 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       ),
   });
   const [schedule, setSchedule] = useState<WeekSchedule>({
-    monday: { isOpen: true, openTime: "09:00", closeTime: "22:00" },
-    tuesday: { isOpen: true, openTime: "09:00", closeTime: "22:00" },
-    wednesday: { isOpen: true, openTime: "09:00", closeTime: "22:00" },
-    thursday: { isOpen: true, openTime: "09:00", closeTime: "22:00" },
-    friday: { isOpen: true, openTime: "09:00", closeTime: "23:00" },
-    saturday: { isOpen: true, openTime: "10:00", closeTime: "23:00" },
-    sunday: { isOpen: true, openTime: "10:00", closeTime: "22:00" },
+    monday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
+    tuesday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
+    wednesday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
+    thursday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
+    friday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekend.close },
+    saturday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekend.open, closeTime: DEFAULT_BUSINESS_HOURS.weekend.close },
+    sunday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekend.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
   });
 
   useEffect(() => {
@@ -116,7 +158,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const filteredCuisines = useMemo(
     () =>
       cuisines.filter((cuisine) => {
-        const matchesSearch = cuisine.name
+        const matchesSearch = cuisine.name?.toLowerCase()
           .toLowerCase()
           .includes(cuisineSearch.toLowerCase());
         return matchesSearch;
@@ -127,11 +169,13 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const handleCuisineToggle = (cuisineId: string) => {
     setSelectedCuisines((prev) => {
       if (prev.includes(cuisineId)) {
-        return prev.filter((id) => id !== cuisineId);
+        // Remove both prefixed and unprefixed versions
+        return prev.filter((id) => id !== cuisineId && id !== cuisineId.replace('cuisine-', ''));
       }
       if (prev.length >= 3) {
         return prev;
       }
+      // Store cuisine name without prefix
       const cuisineName = cuisines.find(c => c.id === cuisineId)?.name;
       if (!cuisineName) return prev;
       return [...prev, cuisineName];
@@ -195,8 +239,8 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
           times: daySchedule.isOpen
             ? [
                 {
-                  startTime: [daySchedule.openTime],
-                  endTime: [daySchedule.closeTime],
+                  startTime: daySchedule.openTime,
+                  endTime: daySchedule.closeTime,
                 },
               ]
             : [],
@@ -209,7 +253,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         profileImage: profileImage[0]?.key,
         restaurantImages: restaurantImages.map(img => img.key),
         menuImages: menuImages.map(img => img.key),
-        cuisines: selectedCuisines.map(id => id.replace('cuisine-', '')),
+        cuisines: selectedCuisines.map(cuisine => cuisine.trim()),
         openingTimes,
       };
       
@@ -327,7 +371,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
                   type="button"
                   onClick={() => handleCuisineToggle(cuisine.id)}
                   className={`p-4 rounded-lg text-left transition-all ${
-                    selectedCuisines.includes(cuisine.id)
+                    selectedCuisines.includes(cuisine.id) || selectedCuisines.includes(cuisine.name)
                       ? "bg-brand-primary/10 border-2 border-brand-primary shadow-md"
                       : selectedCuisines.length >= 3
                       ? "bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed"
@@ -335,7 +379,8 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
                   }`}
                   disabled={
                     selectedCuisines.length >= 3 &&
-                    !selectedCuisines.includes(cuisine.id)
+                    !selectedCuisines.includes(cuisine.id) &&
+                    !selectedCuisines.includes(cuisine.name)
                   }
                 >
                   <div className="flex justify-between items-start">
