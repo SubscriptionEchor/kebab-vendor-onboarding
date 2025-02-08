@@ -263,27 +263,27 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         {!isLoadingCuisines && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredCuisines.map((cuisine) => (
-                <button
-                  key={cuisine.id}
-                  type="button"
-                  onClick={() => handleCuisineToggle(cuisine.id)}
-                  className={`p-4 rounded-lg text-left transition-all ${
-                    selectedCuisines.includes(cuisine.id)
-                      ? 'bg-brand-primary/10 border-2 border-brand-primary shadow-md'
-                      : selectedCuisines.length >= 3
-                        ? 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
-                        : 'bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md'
-                  }`}
-                  disabled={selectedCuisines.length >= 3 && !selectedCuisines.includes(cuisine.id)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-medium">{cuisine.name}</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
+            {filteredCuisines.map((cuisine, index) => (
+  <button
+    key={`${cuisine.id}-${index}`} // Ensure unique keys
+    type="button"
+    onClick={() => handleCuisineToggle(cuisine.id)}
+    className={`p-4 rounded-lg text-left transition-all ${
+      selectedCuisines.includes(cuisine.id)
+        ? 'bg-brand-primary/10 border-2 border-brand-primary shadow-md'
+        : selectedCuisines.length >= 3
+          ? 'bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed'
+          : 'bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md'
+    }`}
+    disabled={selectedCuisines.length >= 3 && !selectedCuisines.includes(cuisine.id)}
+  >
+    <div className="flex justify-between items-start">
+      <div>
+        <div className="font-medium">{cuisine.name}</div>
+      </div>
+    </div>
+  </button>
+))}
             </div>
         
             {filteredCuisines.length === 0 && (
