@@ -54,13 +54,13 @@ const defaultApplication: RestaurantApplication = {
   profileImage: '',
   cuisines: [],
   openingTimes: [
-    { day: 'MON', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'TUE', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'WED', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'THU', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'FRI', times: [{ startTime: ['09:00'], endTime: ['22:00'] }], isOpen: true },
-    { day: 'SAT', times: [], isOpen: false },
-    { day: 'SUN', times: [], isOpen: false },
+    { day: 'MON', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
+    { day: 'TUE', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
+    { day: 'WED', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
+    { day: 'THU', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
+    { day: 'FRI', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
+    { day: 'SAT', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekend.open], endTime: [DEFAULT_BUSINESS_HOURS.weekend.close] }], isOpen: true },
+    { day: 'SUN', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekend.open], endTime: [DEFAULT_BUSINESS_HOURS.weekend.close] }], isOpen: true },
   ],
   businessDocuments: {
     hospitalityLicense: '',
@@ -76,7 +76,7 @@ const defaultApplication: RestaurantApplication = {
     taxId: {
       documentNumber: '',
       documentUrl: '',
-    },
+    }
   },
 };
 
@@ -168,35 +168,28 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       // Format application data for API submission
       const applicationInput = {
         beneficialOwners: application.beneficialOwners.map(owner => ({
-          name: owner.name,
-          passportId: owner.passportId,
-          email: owner.email,
-          phone: formatPhoneNumber(owner.phone, owner.countryCode),
-          countryCode: owner.countryCode === 'IN' ? '91' : '49',
+          name: owner.name.trim(),
+          passportId: owner.passportId.trim(),
+          email: owner.email.trim(),
+          phone: owner.phone,
           isPrimary: owner.isPrimary,
-          idCardDocuments: Array.isArray(owner.idCardDocuments) 
-            ? owner.idCardDocuments.map(doc => typeof doc === 'string' ? doc : doc.key)
-            : []
+          idCardDocuments: owner.idCardDocuments || []
         })),
         companyName: application.companyName.trim(),
         restaurantName: application.restaurantName.trim(),
         restaurantContactInfo: {
           email: application.restaurantContactInfo.email.trim(),
-          phone: formatPhoneNumber(
-            application.restaurantContactInfo.phone,
-            application.restaurantContactInfo.countryCode || 'DE'
-          ),
-          countryCode: application.restaurantContactInfo.countryCode === 'IN' ? '91' : '49'
+          phone: formatPhoneNumber(application.restaurantContactInfo.phone, application.restaurantContactInfo.countryCode)
         },
         location: {
           coordinates: {
             type: 'Point' as const,
             coordinates: [
-              parseFloat(application.location.coordinates.coordinates[0].toFixed(6)),
-              parseFloat(application.location.coordinates.coordinates[1].toFixed(6))
+              application.location.coordinates.coordinates[0],
+              parseFloat(application.location.coordinates.coordinates[1].toFixed(8))
             ]
           },
-          address: application.location.address.trim()
+          address: formatAddress(application.location.address, application.restaurantContactInfo.countryCode)
         },
         restaurantImages: application.restaurantImages
           .map(img => typeof img === 'string' ? img : img.key)
@@ -204,58 +197,53 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         menuImages: application.menuImages
           .map(img => typeof img === 'string' ? img : img.key)
           .filter(Boolean),
-        profileImage: typeof application.profileImage === 'string'
-          ? application.profileImage
-          : application.profileImage?.key || '',
+        profileImage: typeof application.profileImage === 'string' ? 
+          application.profileImage : application.profileImage?.key,
         cuisines: application.cuisines.map(cuisine => 
           typeof cuisine === 'string' ? cuisine.trim() : cuisine.name.trim()
         ),
         openingTimes: application.openingTimes.map(time => ({
           day: time.day,
           isOpen: time.isOpen,
-          times: time.isOpen && time.times && time.times[0] ? [
-            {
-              startTime: time.times[0].startTime,
-              endTime: time.times[0].endTime
-            }
-          ] : []
+          times: time.isOpen && time.times?.length > 0 ? [{
+            startTime: [time.times[0].startTime[0] || time.times[0].startTime],
+            endTime: [time.times[0].endTime[0] || time.times[0].endTime]
+          }] : []
         })),
         businessDocuments: {
           hospitalityLicense: getDocumentKey(application.businessDocuments.hospitalityLicense),
           registrationCertificate: getDocumentKey(application.businessDocuments.registrationCertificate),
-          bankDetails: {
-            ...application.businessDocuments.bankDetails,
-            documentUrl: getDocumentKey(application.businessDocuments.bankDetails.documentUrl)
-          },
           taxId: {
-            ...application.businessDocuments.taxId,
+            documentNumber: application.businessDocuments.taxId.documentNumber || 'default',
             documentUrl: getDocumentKey(application.businessDocuments.taxId.documentUrl)
           }
         }
       };
+      
+      console.log('Formatted application data:', applicationInput);
 
       // Helper function to format phone numbers
       function formatPhoneNumber(phone: string, countryCode: string): string {
         const cleanPhone = phone.replace(/\D/g, '');
-        // Remove any existing country code if present
-        let normalizedPhone = cleanPhone;
-        if (countryCode === 'DE' && normalizedPhone.startsWith('49')) {
-          normalizedPhone = normalizedPhone.substring(2);
-        } else if (countryCode === 'IN' && normalizedPhone.startsWith('91')) {
-          normalizedPhone = normalizedPhone.substring(2);
+        // Keep the phone number as is if it already has a + prefix
+        if (phone.startsWith('+')) {
+          return phone;
         }
-        
-        // Remove leading zeros
-        normalizedPhone = normalizedPhone.replace(/^0+/, '');
-        
-        // For Indian numbers, ensure exactly 10 digits
-        if (countryCode === 'IN' && normalizedPhone.length > 10) {
-          normalizedPhone = normalizedPhone.slice(-10);
+        // Otherwise, format it with the country code
+        const normalizedPhone = cleanPhone.replace(/^0+/, '');
+        return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
+      }
+
+      // Helper function to format address
+      function formatAddress(address: string, countryCode: string): string {
+        const parts = address.split(',').map(part => part.trim());
+        if (countryCode === 'IN') {
+          const [street = '', city = '', state = '', country = 'India', postalCode = ''] = parts;
+          return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
+        } else {
+          const [street = '', city = 'Berlin', state = 'Berlin', country = 'Germany', postalCode = ''] = parts;
+          return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
         }
-        
-        // Format according to E.164 standard
-        const prefix = countryCode === 'IN' ? '91' : '49';
-        return `+${prefix}${normalizedPhone}`;
       }
 
       // Helper function to get document key

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { FileText, AlertCircle } from 'lucide-react';
@@ -30,6 +30,48 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
+
+  // Initialize documents state from application
+  useEffect(() => {
+    if (application?.businessDocuments) {
+      const { businessDocuments } = application;
+      
+      setDocuments({
+        hospitalityLicense: businessDocuments.hospitalityLicense ? [{
+          key: businessDocuments.hospitalityLicense,
+          previewUrl: businessDocuments.hospitalityLicense
+        }] : [],
+        registrationCertificate: businessDocuments.registrationCertificate ? [{
+          key: businessDocuments.registrationCertificate,
+          previewUrl: businessDocuments.registrationCertificate
+        }] : [],
+        bankDocument: businessDocuments.bankDetails?.documentUrl ? [{
+          key: businessDocuments.bankDetails.documentUrl,
+          previewUrl: businessDocuments.bankDetails.documentUrl
+        }] : [],
+        taxDocument: businessDocuments.taxId?.documentUrl ? [{
+          key: businessDocuments.taxId.documentUrl,
+          previewUrl: businessDocuments.taxId.documentUrl
+        }] : [],
+        idCards: application.beneficialOwners?.[0]?.idCardDocuments?.map(doc => ({
+          key: doc,
+          previewUrl: doc
+        })) || []
+      });
+
+      // Initialize bank details
+      const { bankDetails: existingBankDetails } = businessDocuments;
+      if (existingBankDetails) {
+        setBankDetails({
+          bankName: existingBankDetails.bankName || '',
+          accountHolderName: existingBankDetails.accountHolderName || '',
+          accountNumber: existingBankDetails.accountNumber || '',
+          branchName: existingBankDetails.branchName || '',
+          bankIdentifierCode: existingBankDetails.bankIdentifierCode || ''
+        });
+      }
+    }
+  }, [application]);
   const { errors: validationErrors, validate, clearErrors } = useFormValidation({
     // Only validate required documents
     hospitalityLicense: (value: boolean) => value,
@@ -105,11 +147,10 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     if (!documents.taxDocument[0]?.key) {
       validationErrors.push('Tax Document is required');
     }
-    if (!bankDetails.bankIdentifierCode) {
-      validationErrors.push('Bank Identifier Code (BIC/SWIFT) is required');
-    }
-    if (documents.idCards.length === 0) {
-      validationErrors.push('At least one ID Card is required');
+    if (documents.idCards.length < 2) {
+      validationErrors.push('Please upload both front and back sides of your ID card');
+    } else if (documents.idCards.length > 2) {
+      validationErrors.push('Only front and back sides of ID card are required');
     }
     
     if (validationErrors.length > 0) {
@@ -127,23 +168,18 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       // Prepare application data with proper formatting
       const applicationData = {
+        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
+          ...owner,
+          idCardDocuments: documents.idCards.map(doc => doc.key)
+        })) || [],
         businessDocuments: {
           hospitalityLicense: documents.hospitalityLicense[0]?.key,
           registrationCertificate: documents.registrationCertificate[0]?.key,
-          bankDetails: {
-            ...bankDetails,
-            documentUrl: documents.bankDocument[0]?.key,
-          },
           taxId: {
-            documentNumber: bankDetails.bankIdentifierCode,
+            documentNumber: 'default',
             documentUrl: documents.taxDocument[0]?.key,
           },
-        },
-        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-          ...owner,
-          phone: formatPhoneNumber(owner.phone, owner.countryCode || 'DE'),
-          idCardDocuments: documents.idCards.map(doc => doc.key).filter(Boolean)
-        })) || []
+        }
       };
 
       // Update application state
@@ -194,8 +230,9 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     {
       key: 'idCards' as const,
       label: 'ID Cards',
-      description: 'Government-issued ID cards of all owners',
-      required: true
+      description: 'Upload exactly 2 government-issued ID cards (front and back). Both sides must be clear and legible.',
+      required: true,
+      maxFiles: 2
     },
   ];
 
@@ -249,7 +286,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
               </div>
               <ImageUpload
                 label="Upload Document"
-                maxImages={doc.key === 'idCards' ? 4 : 1}
+                maxImages={doc.key === 'idCards' ? 2 : 1}
                 acceptDocuments={true}
                 images={documents[doc.key]}
                 onImagesChange={(images) => 
@@ -265,7 +302,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       {/* Bank Details Section */}
       <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Bank Account Details</h2>
-        <p className="text-sm text-gray-600 mb-6">Please provide your bank details and tax identification number</p>
+        <p className="text-sm text-gray-600 mb-6">Optional: You can provide your bank details now or add them later</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-lg border border-gray-200 p-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -328,16 +365,15 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           </div>
 
           <div className="md:col-span-2">
-            <RequiredLabel>
+            <label className="block text-sm text-gray-700 mb-1">
               Bank Identifier Code (BIC/SWIFT)
-            </RequiredLabel>
+            </label>
             <Input
               value={bankDetails.bankIdentifierCode}
               onChange={(e) => setBankDetails(prev => ({
                 ...prev,
                 bankIdentifierCode: e.target.value
               }))}
-              required
               placeholder="Enter BIC/SWIFT code"
               className="h-11"
             />

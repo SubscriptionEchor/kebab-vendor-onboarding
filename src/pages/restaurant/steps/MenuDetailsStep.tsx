@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Clock, Search } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
+import { TimePicker } from "../../../components/ui/TimePicker";
 import { Input } from "../../../components/ui/Input";
 import { ImageUpload } from "../../../components/ui/ImageUpload";
 import { getCuisines } from "../../../services/restaurant";
@@ -22,8 +23,8 @@ interface MenuDetailsStepProps {
 
 interface DaySchedule {
   isOpen: boolean;
-  openTime: string;
-  closeTime: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface Cuisine {
@@ -33,13 +34,13 @@ interface Cuisine {
 
 type WeekSchedule = {
   [key in
-    | "monday"
-    | "tuesday"
-    | "wednesday"
-    | "thursday"
-    | "friday"
-    | "saturday"
-    | "sunday"]: DaySchedule;
+    | "MON"
+    | "TUE"
+    | "WED"
+    | "THU"
+    | "FRI"
+    | "SAT"
+    | "SUN"]: DaySchedule;
 };
 
 const DEFAULT_CUISINE_TYPE = "Other";
@@ -53,10 +54,11 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
   const { application, updateApplication } = useRestaurantApplication();
+  const [isInitialized, setIsInitialized] = useState(false);
   
   // Initialize form data from application context
   useEffect(() => {
-    if (application) {
+    if (application && !isInitialized) {
       // Restore profile image
       if (application.profileImage) {
         setProfileImage([{ key: application.profileImage, previewUrl: application.profileImage }]);
@@ -86,8 +88,10 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       if (application.cuisines?.length) {
         setSelectedCuisines(application.cuisines);
       }
+      
+      setIsInitialized(true);
     }
-  }, [application]);
+  }, [application, isInitialized]);
   
   // Initialize selected cuisines from application state
   useEffect(() => {
@@ -102,18 +106,35 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     cuisines: validateCuisines,
     openingTimes: (times) =>
       Object.values(times).every(
-        (t) => !t.isOpen || (t.openTime && t.closeTime)
+        (t) => !t.isOpen || (t.startTime && t.endTime)
       ),
   });
   const [schedule, setSchedule] = useState<WeekSchedule>({
-    monday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
-    tuesday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
-    wednesday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
-    thursday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
-    friday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekday.open, closeTime: DEFAULT_BUSINESS_HOURS.weekend.close },
-    saturday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekend.open, closeTime: DEFAULT_BUSINESS_HOURS.weekend.close },
-    sunday: { isOpen: true, openTime: DEFAULT_BUSINESS_HOURS.weekend.open, closeTime: DEFAULT_BUSINESS_HOURS.weekday.close },
+    MON: { isOpen: true, startTime: "09:00", endTime: "22:00" },
+    TUE: { isOpen: true, startTime: "09:00", endTime: "22:00" },
+    WED: { isOpen: true, startTime: "09:00", endTime: "22:00" },
+    THU: { isOpen: true, startTime: "09:00", endTime: "22:00" },
+    FRI: { isOpen: true, startTime: "09:00", endTime: "22:00" },
+    SAT: { isOpen: true, startTime: "10:00", endTime: "23:00" },
+    SUN: { isOpen: true, startTime: "10:00", endTime: "23:00" },
   });
+
+  // Initialize schedule from application state
+  useEffect(() => {
+    if (application?.openingTimes) {
+      const newSchedule = { ...schedule };
+      application.openingTimes.forEach(time => {
+        if (time.day in newSchedule) {
+          newSchedule[time.day as keyof WeekSchedule] = {
+            isOpen: time.isOpen,
+            startTime: time.times?.[0]?.startTime[0] || DEFAULT_BUSINESS_HOURS.weekday.open,
+            endTime: time.times?.[0]?.endTime[0] || DEFAULT_BUSINESS_HOURS.weekday.close
+          };
+        }
+      });
+      setSchedule(newSchedule);
+    }
+  }, [application]);
 
   useEffect(() => {
     const fetchCuisines = async () => {
@@ -189,65 +210,60 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   ) => {
     setSchedule((prev) => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [field]: value,
-      },
+      [day]: field === 'isOpen'
+        ? {
+            ...prev[day],
+            isOpen: value as boolean,
+            startTime: prev[day].startTime || DEFAULT_BUSINESS_HOURS.weekday.open,
+            endTime: prev[day].endTime || DEFAULT_BUSINESS_HOURS.weekday.close,
+          }
+        : {
+            ...prev[day],
+            [field]: value,
+          },
     }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-    
+
     try {
       // Validate required fields
       if (profileImage.length === 0) {
         throw new Error("Please upload a profile image");
       }
-      
+
       if (restaurantImages.length < 2) {
         throw new Error("Please upload at least 2 restaurant images");
       }
-      
+
       if (menuImages.length === 0) {
         throw new Error("Please upload at least one menu image");
       }
-      
+
       if (selectedCuisines.length !== 3) {
         throw new Error("Please select exactly 3 cuisines");
       }
-      
+
       // Format opening times
-      const allDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-      const openingTimes = allDays.map((day) => {
-        const scheduleDay = Object.entries(schedule).find(([key]) =>
-          key.toUpperCase().startsWith(day)
-        );
-  
-        if (!scheduleDay) {
-          return {
-            day,
-            times: [],
-            isOpen: false,
-          };
-        }
-  
-        const [_, daySchedule] = scheduleDay;
+      const openingTimes = Object.entries(schedule).map(([day, daySchedule]) => {
+        // Ensure time is in HH:mm format
+        const formatTime = (time: string) => {
+          const [hours, minutes] = time.split(':');
+          return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+        };
+
         return {
           day,
-          times: daySchedule.isOpen
-            ? [
-                {
-                  startTime: daySchedule.openTime,
-                  endTime: daySchedule.closeTime,
-                },
-              ]
-            : [],
+          times: daySchedule.isOpen ? [{
+            startTime: [formatTime(daySchedule.startTime)],
+            endTime: [formatTime(daySchedule.endTime)]
+          }] : [],
           isOpen: daySchedule.isOpen,
         };
       });
-  
+
       // Prepare form data
       const formData = {
         profileImage: profileImage[0]?.key,
@@ -427,23 +443,14 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
               {schedule[day].isOpen && (
                 <>
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    <input
-                      type="time"
-                      value={schedule[day].openTime}
-                      onChange={(e) =>
-                        updateSchedule(day, "openTime", e.target.value)
-                      }
-                      className="rounded-md border-gray-300 focus:border-brand-primary focus:ring-brand-primary"
+                    <TimePicker
+                      value={schedule[day].startTime}
+                      onChange={(time) => updateSchedule(day, "startTime", time)}
                     />
                     <span>to</span>
-                    <input
-                      type="time"
-                      value={schedule[day].closeTime}
-                      onChange={(e) =>
-                        updateSchedule(day, "closeTime", e.target.value)
-                      }
-                      className="rounded-md border-gray-300 focus:border-brand-primary focus:ring-brand-primary"
+                    <TimePicker
+                      value={schedule[day].endTime}
+                      onChange={(time) => updateSchedule(day, "endTime", time)}
                     />
                   </div>
                 </>

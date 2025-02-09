@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
-import { Asterisk, Plus, X, MapPin, Search } from 'lucide-react';
+import { Asterisk, Plus, X, MapPin, Search, AlertCircle } from 'lucide-react';
 import PhoneInput from '../../../components/ui/PhoneInput';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
@@ -11,6 +11,20 @@ import L from 'leaflet';
 
 // Import Leaflet CSS
 import 'leaflet/dist/leaflet.css';
+
+// Berlin boundaries (approximate)
+const BERLIN_BOUNDS = {
+  north: 52.6755,
+  south: 52.3382,
+  east: 13.7611,
+  west: 13.0878
+};
+
+// Berlin center
+const BERLIN_CENTER = {
+  lat: 52.520008,
+  lng: 13.404954
+};
 
 // Fix Leaflet default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -36,22 +50,56 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [outOfBounds, setOutOfBounds] = useState(false);
   const map = useMap();
   const provider = new OpenStreetMapProvider();
+
+  // Add Berlin boundary rectangle
+  useEffect(() => {
+    const rectangle = L.rectangle([
+      [BERLIN_BOUNDS.north, BERLIN_BOUNDS.west],
+      [BERLIN_BOUNDS.south, BERLIN_BOUNDS.east]
+    ], {
+      color: '#EDCC27',
+      weight: 2,
+      fillColor: '#EDCC27',
+      fillOpacity: 0.1,
+      dashArray: '5, 10'
+    }).addTo(map);
+
+    return () => {
+      map.removeLayer(rectangle);
+    };
+  }, [map]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setIsSearching(true);
+    setOutOfBounds(false);
+    
     try {
-      const results = await provider.search({ query: searchQuery });
+      const results = await provider.search({ query: `${searchQuery}, Berlin` });
       setResults(results);
     } finally {
       setIsSearching(false);
     }
   };
 
+  const isLocationInBerlin = (lat: number, lng: number) => {
+    return lat >= BERLIN_BOUNDS.south && 
+           lat <= BERLIN_BOUNDS.north && 
+           lng >= BERLIN_BOUNDS.west && 
+           lng <= BERLIN_BOUNDS.east;
+  };
+
   const handleSelect = (result: any) => {
+    if (!isLocationInBerlin(result.y, result.x)) {
+      setOutOfBounds(true);
+      return;
+    }
+    
+    setOutOfBounds(false);
     const location = {
       lat: result.y,
       lng: result.x,
@@ -101,6 +149,17 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
                 <span className="text-sm">{result.label}</span>
               </button>
             ))}
+          </div>
+        )}
+        
+        {outOfBounds && (
+          <div className="absolute top-full left-0 right-0 mt-2 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">
+                Selected location is outside Berlin. Please choose a location within Berlin city limits.
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -712,12 +771,20 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
 
         <div className="mt-6">
           <RequiredLabel>Confirm Location on Map</RequiredLabel>
+          <p className="text-sm text-gray-600 mb-2">
+            Please select a location within Berlin city limits (highlighted area)
+          </p>
           <div className="relative h-[400px] rounded-xl overflow-hidden shadow-lg">
             <MapContainer
-              center={[formData.location.lat, formData.location.lng]}
+              center={[BERLIN_CENTER.lat, BERLIN_CENTER.lng]}
               zoom={13}
               className="h-full w-full [&_.leaflet-control-attribution]:bg-white/70 [&_.leaflet-control-attribution]:backdrop-blur-sm"
               zoomControl={false}
+              maxBounds={[
+                [BERLIN_BOUNDS.north, BERLIN_BOUNDS.west],
+                [BERLIN_BOUNDS.south, BERLIN_BOUNDS.east]
+              ]}
+              maxBoundsViscosity={1.0}
             >
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
