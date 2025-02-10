@@ -83,3 +83,28 @@ export interface UploadDocumentResponse {
     status: 'PENDING' | 'VERIFIED' | 'REJECTED';
   };
 }
+
+export interface GetApplicationsResponse {
+  getRestaurantOnboardingApplications: Array<{
+    _id: string;
+    restaurantName: string;
+    applicationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+    createdAt: string;
+    resubmissionCount: number;
+    statusHistory: Array<{
+      status: string;
+      timestamp: string;
+      reason: string | null;
+    }>;
+    location: {
+      address: string;
+    };
+    businessDocuments: {
+      hospitalityLicense: string;
+      registrationCertificate: string;
+      taxId: {
+        documentUrl: string;
+      };
+    };
+  }>;
+}

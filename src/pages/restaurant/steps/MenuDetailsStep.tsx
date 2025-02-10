@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/Button";
 import { TimePicker } from "../../../components/ui/TimePicker";
 import { Input } from "../../../components/ui/Input";
 import { ImageUpload } from "../../../components/ui/ImageUpload";
-import { getCuisines } from "../../../services/restaurant";
+import { useAuth } from "../../../context/AuthContext";
 import { useRestaurantApplication } from "../../../context/RestaurantApplicationContext";
 import { useFormValidation } from "../../../hooks/useFormValidation";
 import {
@@ -41,6 +41,7 @@ const DEFAULT_CUISINE_TYPE = "Other";
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const { application, updateApplication } = useRestaurantApplication();
 
+  const { cuisines: availableCuisines } = useAuth();
   const [restaurantImages, setRestaurantImages] = useState(
     () =>
       application?.restaurantImages?.map((img) => ({
@@ -73,11 +74,17 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         ]
       : []
   );
-  const [cuisines, setCuisines] = useState<Cuisine[]>([]);
+  const cuisines = useMemo(() => 
+    availableCuisines.map(cuisine => ({
+      id: `cuisine-${cuisine.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).substr(2, 9)}`,
+      name: cuisine.name
+    })),
+    [availableCuisines]
+  );
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState("");
-  const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
 
   // Initialize form data from application context
   useEffect(() => {
@@ -171,53 +178,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     }
   }, [application]);
 
-  useEffect(() => {
-    const fetchCuisines = async () => {
-      setIsLoadingCuisines(true);
-      try {
-        const response = await getCuisines();
-        console.log("Cuisine response:", response);
-  
-        if (response?.vendorOnboardingBootstrap?.cuisines) {
-          const seenNames = new Set();
-          const fetchedCuisines = response.vendorOnboardingBootstrap.cuisines
-            .filter((cuisine) => {
-              if (seenNames.has(cuisine.name)) {
-                return false;
-              }
-              seenNames.add(cuisine.name);
-              return true;
-            })
-            .map((cuisine) => ({
-              id: `cuisine-${cuisine.name
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "-")}`,
-              name: cuisine.name,
-            }));
-  
-          console.log("Fetched cuisines:", fetchedCuisines);
-          setCuisines(fetchedCuisines);
-          
-          // Ensure selected cuisines are updated after fetch
-          if (application?.cuisines) {
-            const validCuisines = application.cuisines.filter(cuisineName =>
-              fetchedCuisines.some(c => c.name === cuisineName)
-            );
-            setSelectedCuisines(validCuisines);
-          }
-        } else {
-          throw new Error("No cuisines found");
-        }
-      } catch (error) {
-        console.error("Failed to fetch cuisines:", error);
-        setCuisines([]);
-      } finally {
-        setIsLoadingCuisines(false);
-      }
-    };
-  
-    fetchCuisines();
-  }, [application]);
 
   const filteredCuisines = useMemo(
     () =>
@@ -433,7 +393,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         {!isLoadingCuisines && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredCuisines.map((cuisine, index) => (
+              {filteredCuisines.map((cuisine) => (
                 <button
                 key={cuisine.id}
                 type="button"

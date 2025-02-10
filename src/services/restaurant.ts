@@ -3,8 +3,36 @@ import type {
   CreateRestaurantResponse, 
   UpdateRestaurantResponse, 
   UploadDocumentResponse,
-  GetCuisinesResponse
+  GetCuisinesResponse,
+  GetApplicationsResponse
 } from './types';
+
+const GET_APPLICATIONS = `
+  query VendorApplications {
+    getRestaurantOnboardingApplication {
+      _id
+      restaurantName
+      applicationStatus
+      resubmissionCount
+      createdAt
+      statusHistory {
+        status
+        timestamp
+        reason
+      }
+      location {
+        address
+      }
+      businessDocuments {
+        hospitalityLicense
+        registrationCertificate
+        taxId {
+          documentUrl
+        }
+      }
+    }
+  }
+`;
 
 const GET_CUISINES = `
   query VendorOnboardingBootstrap {
@@ -109,4 +137,43 @@ export async function getCuisines() {
   };
 
   return graphqlRequest<GetCuisinesResponse>(GET_CUISINES, {}, headers);
+}
+
+export async function getApplications(token: string) {
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    // Verify token is valid
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (Date.now() >= payload.exp * 1000) {
+      localStorage.removeItem('authToken');
+      throw new Error('Session expired');
+    }
+  } catch (error) {
+    localStorage.removeItem('authToken');
+    throw new Error('Invalid token');
+  }
+
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+    'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+    'Priority': 'u=1, i'
+  };
+
+  try {
+    const response = await graphqlRequest<GetApplicationsResponse>(GET_APPLICATIONS, undefined, headers);
+    return response;
+  } catch (error) {
+    console.error('Failed to fetch applications:', error);
+    if (error instanceof Error && error.message.includes('401')) {
+      localStorage.removeItem('authToken');
+      throw new Error('Session expired');
+    }
+    throw error;
+  }
 }

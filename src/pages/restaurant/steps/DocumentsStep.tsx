@@ -135,6 +135,9 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     clearErrors();
     setErrors([]);
     
+    console.log('Current documents state:', documents);
+    console.log('ID Cards available:', documents.idCards);
+    
     // Validate all required fields first
     const validationErrors = [];
     
@@ -168,30 +171,56 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       // Prepare application data with proper formatting
       const applicationData = {
-        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-          name: owner.name,
-          passportId: owner.passportId,
-          email: owner.email,
-          phone: owner.phone,
-          isPrimary: owner.isPrimary,
-          idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : owner.idCardDocuments || []
-        })) || [],
+        beneficialOwners: (application?.beneficialOwners || []).map(owner => {
+          const ownerIdCards = owner.isPrimary ? documents.idCards.map(doc => doc.key) : [];
+          // Ensure we have the ID card documents for primary owner
+          if (owner.isPrimary && documents.idCards.length > 0) {
+            console.log('Setting ID cards for primary owner:', documents.idCards.map(doc => doc.key));
+            return {
+              name: owner.name,
+              passportId: owner.passportId,
+              email: owner.email,
+              phone: owner.phone,
+              isPrimary: true,
+              idCardDocuments: documents.idCards.map(doc => doc.key)
+            };
+          }
+          
+          return {
+            name: owner.name,
+            passportId: owner.passportId,
+            email: owner.email,
+            phone: owner.phone,
+            isPrimary: false,
+            idCardDocuments: []
+          };
+        }),
         businessDocuments: {
           hospitalityLicense: documents.hospitalityLicense[0]?.key,
           registrationCertificate: documents.registrationCertificate[0]?.key,
           taxId: {
-            documentNumber: 'default',
+            documentNumber: bankDetails.bankIdentifierCode || 'default',
             documentUrl: documents.taxDocument[0]?.key
           },
           bankDetails: {
-            ...application?.businessDocuments.bankDetails,
+            bankName: bankDetails.bankName,
+            accountHolderName: bankDetails.accountHolderName,
+            accountNumber: bankDetails.accountNumber,
+            branchName: bankDetails.branchName,
+            bankIdentifierCode: bankDetails.bankIdentifierCode,
             documentUrl: documents.bankDocument[0]?.key || ''
           }
         }
       };
 
-      console.log('Submitting application with ID cards:', documents.idCards.map(doc => doc.key));
-      console.log('Application data being submitted:', applicationData);
+      // Log the application data for debugging
+      console.log('Final application data:', {
+        ...applicationData,
+        beneficialOwners: applicationData.beneficialOwners.map(owner => ({
+          ...owner,
+          idCardDocuments: owner.idCardDocuments
+        }))
+      });
 
       // Update application state
       await updateApplication(applicationData);
@@ -210,6 +239,10 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   };
 
   const handleGoHome = () => {
+    // Clear application state after successful submission
+    window.localStorage.removeItem('restaurantApplication');
+    window.localStorage.removeItem('restaurantDocuments');
+    window.sessionStorage.removeItem('currentStep');
     navigate('/dashboard');
   };
 

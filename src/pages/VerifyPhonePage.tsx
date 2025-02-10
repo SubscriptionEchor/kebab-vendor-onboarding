@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { verifyPhoneOTP, sendPhoneOTP } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
+import { getApplications } from '../services/restaurant';
 
 export function VerifyPhonePage() {
   const navigate = useNavigate();
@@ -84,14 +85,14 @@ export function VerifyPhonePage() {
       if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
         // Store the token for future API calls
         localStorage.setItem('authToken', response.verifyPhoneOtpForOnboardingVendorAndLogin.token);
-        
+
         // Check if this is a new vendor
         if (response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor) {
           navigate('/verify-email');
           return;
         } 
         
-        navigate('/dashboard');
+        navigate('/applications');
       } else {
         setErrors(['Verification failed. Please try again.']);
       }

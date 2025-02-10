@@ -16,4 +16,5 @@ export interface AuthContextType extends AuthState {
   login: (phone: string, countryCode: string) => Promise<void>;
   logout: () => void;
   register: (phone: string, countryCode: string, name: string) => Promise<void>;
+  cuisines: Array<{ name: string }>;
 }

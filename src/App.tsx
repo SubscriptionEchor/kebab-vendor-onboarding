@@ -39,9 +39,9 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginView />} />
-            <Route path="/verify-otp" element={<VerifyOTPPage />} />
             <Route path="/verify-phone" element={<VerifyPhonePage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify-otp" element={<VerifyOTPPage />} />
             
             {/* Protected Routes */}
             <Route element={<PrivateRoute><RestaurantApplicationProvider><MainLayout /></RestaurantApplicationProvider></PrivateRoute>}>

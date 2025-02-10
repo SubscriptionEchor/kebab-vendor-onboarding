@@ -1,31 +1,61 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AuthContextType, User } from '../types/auth';
-import { sendPhoneOTP } from '../services/auth';
+import { sendPhoneOTP, verifyPhoneOTP } from '../services/auth';
+import { getApplications } from '../services/restaurant';
+import { useNavigate } from 'react-router-dom';
+import { getCuisines } from '../services/restaurant'; 
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [shouldFetchApplications, setShouldFetchApplications] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(
     localStorage.getItem('authToken')
   );
+  const [cuisines, setCuisines] = useState<Array<{ name: string }>>([]);
+
+  const fetchCuisines = async (token: string) => {
+    try {
+      const response = await getCuisines();
+      if (response?.vendorOnboardingBootstrap?.cuisines) {
+        const uniqueCuisines = Array.from(
+          new Set(response.vendorOnboardingBootstrap.cuisines.map(c => c.name))
+        ).map(name => ({ name }));
+        setCuisines(uniqueCuisines);
+        // Cache cuisines in localStorage
+        localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
+      }
+    } catch (error) {
+      console.error('Failed to fetch cuisines:', error);
+    }
+  };
+
+  // Load cached cuisines on mount
+  useEffect(() => {
+    const cachedCuisines = localStorage.getItem('cachedCuisines');
+    if (cachedCuisines) {
+      setCuisines(JSON.parse(cachedCuisines));
+    }
+  }, []);
+
+  // Fetch cuisines when auth token changes
+  useEffect(() => {
+    if (authToken && cuisines.length === 0) {
+      fetchCuisines(authToken);
+    }
+  }, [authToken, cuisines.length]);
 
   const login = async (phone: string, countryCode: string) => {
     setIsLoading(true);
     try {
-      console.log('Attempting login for:', phone);
       const response = await sendPhoneOTP(phone);
       if (!response.sendPhoneOtpForOnboardingVendorLogin.result) {
         throw new Error(response.sendPhoneOtpForOnboardingVendorLogin.message);
       }
       
-      if (response.sendPhoneOtpForOnboardingVendorLogin.token) {
-        const token = response.sendPhoneOtpForOnboardingVendorLogin.token;
-        localStorage.setItem('authToken', token);
-        setAuthToken(token);
-      }
-
       setUser({
         id: '1',
         email: '',
@@ -33,7 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: `Restaurant Owner (${countryCode})`,
         role: 'owner',
       });
-      console.log('Login successful, OTP sent');
+      
+      navigate('/verify-phone');
       return response.sendPhoneOtpForOnboardingVendorLogin.result;
     } catch (error) {
       console.error('Login failed:', error);
@@ -47,6 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // Clear application state on logout
+    setShouldFetchApplications(false);
+    window.localStorage.removeItem('restaurantApplication');
+    window.localStorage.removeItem('restaurantDocuments');
+    window.localStorage.removeItem('authToken');
+    window.sessionStorage.removeItem('currentStep');
     setUser(null);
     setAuthToken(null);
   };
@@ -72,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const payload = JSON.parse(atob(authToken.split('.')[1]));
         const expirationTime = payload.exp * 1000; // Convert to milliseconds
+        setShouldFetchApplications(true);
         
         if (Date.now() >= expirationTime) {
           logout();
@@ -88,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout();
       }
     }
-  }, [authToken]);
+  }, [authToken, cuisines.length]);
 
   return (
     <AuthContext.Provider
@@ -100,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         register,
         token: authToken,
+        cuisines,
       }}
     >
       {children}

@@ -5,20 +5,22 @@ import {
   XCircle,
   Search,
   Filter,
-  ChevronDown,
   FileText,
-  Building2
+  Building2,
+  AlertCircle
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
+import { getApplications } from '../services/restaurant';
+import { useToast } from '../context/ToastContext';
 
 interface Application {
   id: string;
   restaurantName: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'requested_onboarding';
   submittedAt: string;
   address: string;
-  reviewNotes?: string;
   documents: {
     type: string;
     status: 'verified' | 'pending' | 'rejected';
@@ -27,67 +29,112 @@ interface Application {
 
 export function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
+  const { showToast } = useToast();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Simulating API call to fetch applications
-    const fetchApplications = async () => {
-      try {
-        // Simulated API response
-        const mockApplications: Application[] = [
+  const fetchApplicationData = async () => {
+    if (!localStorage.getItem('authToken')) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setIsError(false);
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await getApplications(token);
+      const applications = response.getRestaurantOnboardingApplication;
+      
+      if (!applications || applications.length === 0) {
+        setApplications([]);
+        return;
+      }
+
+      const formattedApplications = applications.map(app => {
+        const documents = [
           {
-            id: '1',
-            restaurantName: 'Kebab Express Downtown',
-            status: 'pending',
-            submittedAt: new Date().toISOString().split('T')[0],
-            address: 'Friedrichstraße 123, 10117 Berlin',
-            documents: [
-              { type: 'Hospitality License', status: 'pending' },
-              { type: 'Registration Certificate', status: 'verified' },
-              { type: 'Tax Document', status: 'pending' },
-            ],
+            type: 'Hospitality License',
+            status: app.businessDocuments?.hospitalityLicense ? 'verified' : 'pending'
           },
           {
-            id: '2',
-            restaurantName: 'Kebab House Central',
-            status: 'approved',
-            submittedAt: '2024-03-10',
-            address: 'Kantstraße 45, 10627 Berlin',
-            reviewNotes: 'All documents verified. Welcome to Kebab Partners!',
-            documents: [
-              { type: 'Hospitality License', status: 'verified' },
-              { type: 'Registration Certificate', status: 'verified' },
-              { type: 'Tax Document', status: 'verified' },
-            ],
+            type: 'Registration Certificate',
+            status: app.businessDocuments?.registrationCertificate ? 'verified' : 'pending'
           },
           {
-            id: '3',
-            restaurantName: 'Kebab Corner',
-            status: 'rejected',
-            submittedAt: '2024-03-05',
-            address: 'Torstraße 89, 10119 Berlin',
-            reviewNotes: 'Missing required documentation. Please resubmit with valid hospitality license.',
-            documents: [
-              { type: 'Hospitality License', status: 'rejected' },
-              { type: 'Registration Certificate', status: 'verified' },
-              { type: 'Tax Document', status: 'verified' },
-            ],
-          },
+            type: 'Tax Document',
+            status: app.businessDocuments?.taxId?.documentUrl ? 'verified' : 'pending'
+          }
         ];
 
-        setApplications(mockApplications);
-      } finally {
-        setIsLoading(false);
+        return {
+          id: app._id,
+          restaurantName: app.restaurantName || 'Unnamed Restaurant',
+          status: app.applicationStatus.toLowerCase() as Application['status'],
+          submittedAt: new Date(parseInt(app.createdAt)).toLocaleDateString(),
+          address: app.location?.address || 'Address not provided',
+          documents
+        };
+      });
+
+      setApplications(formattedApplications);
+
+    } catch (error) {
+      console.error('Failed to fetch applications:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('Session expired') || 
+            error.message.includes('Invalid token') ||
+            error.message.includes('Authentication required')) {
+          localStorage.removeItem('authToken');
+          navigate('/login');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        setIsError(true);
+        setError('Failed to load applications. Please try again.');
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch applications on mount if we have an auth token
+  useEffect(() => {
+    const fetchApplications = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      await fetchApplicationData();
     };
 
     fetchApplications();
   }, []);
+  
+  // Retry loading on error
+  const handleRetry = () => {
+    setError(null);
+    setIsError(false);
+    fetchApplicationData();
+  };
 
   const getStatusIcon = (status: Application['status']) => {
     switch (status) {
+      case 'requested_onboarding':
+        return { icon: Clock, color: 'text-blue-500' };
       case 'pending':
         return { icon: Clock, color: 'text-yellow-500' };
       case 'approved':
@@ -116,7 +163,7 @@ export function ApplicationsPage() {
             Applications
           </h1>
           <Button
-            onClick={() => window.history.back()}
+            onClick={() => navigate('/dashboard')}
             variant="outline"
           >
             Back to Dashboard
@@ -152,84 +199,115 @@ export function ApplicationsPage() {
           </div>
         </div>
 
-        {/* Applications List */}
-        <div className="space-y-4">
-          {filteredApplications.map((application) => {
-            const { icon: StatusIcon, color } = getStatusIcon(application.status);
-            return (
-              <motion.div
-                key={application.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl shadow-sm overflow-hidden"
+        {isError && (
+          <div className="bg-red-50 text-red-700 p-4 rounded-lg flex items-center justify-between">
+            <p className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              {error}
+            </p>
+            <Button
+              onClick={handleRetry}
+              variant="outline"
+              size="sm">
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2].map((index) => (
+              <div
+                key={index}
+                className="bg-white rounded-xl shadow-sm overflow-hidden animate-pulse"
               >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-start gap-4">
-                      <div className={`w-10 h-10 rounded-lg bg-${color.split('-')[1]}-100 flex items-center justify-center`}>
-                        <Building2 className={`w-5 h-5 ${color}`} />
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900">{application.restaurantName}</h3>
-                        <p className="text-sm text-gray-500">{application.address}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <StatusIcon className={`w-4 h-4 ${color}`} />
-                          <span className={`text-sm font-medium capitalize ${
-                            application.status === 'approved' ? 'text-green-600' :
-                            application.status === 'rejected' ? 'text-red-600' :
-                            'text-yellow-600'
-                          }`}>
-                            {application.status}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            • Submitted on {application.submittedAt}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Documents Status */}
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Documents Status</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {application.documents.map((doc, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-2 p-2 rounded-lg bg-gray-50"
-                        >
-                          <FileText className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-600">{doc.type}</span>
-                          <span className={`text-xs px-2 py-1 rounded-full ml-auto ${
-                            doc.status === 'verified' ? 'bg-green-100 text-green-600' :
-                            doc.status === 'rejected' ? 'bg-red-100 text-red-600' :
-                            'bg-yellow-100 text-yellow-600'
-                          }`}>
-                            {doc.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Review Notes */}
-                  {application.reviewNotes && (
-                    <div className="mt-4 p-4 rounded-lg bg-gray-50">
-                      <h4 className="text-sm font-medium text-gray-700 mb-1">Review Notes</h4>
-                      <p className="text-sm text-gray-600">{application.reviewNotes}</p>
-                    </div>
-                  )}
+                <div className="p-6 space-y-4">
+                  <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                 </div>
-              </motion.div>
-            );
-          })}
+              </div>
+            ))}
+          </div>
+        ) : filteredApplications.length > 0 ? (
+          <div className="space-y-4">
+            {filteredApplications.map((application) => {
+              const { icon: StatusIcon, color } = getStatusIcon(application.status);
+              return (
+                <motion.div
+                  key={application.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-xl shadow-sm overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-start gap-4">
+                        <div className={`w-10 h-10 rounded-lg bg-${color.split('-')[1]}-100 flex items-center justify-center`}>
+                          <Building2 className={`w-5 h-5 ${color}`} />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-gray-900">{application.restaurantName}</h3>
+                          <p className="text-sm text-gray-500">{application.address}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <StatusIcon className={`w-4 h-4 ${color}`} />
+                            <span className={`text-sm font-medium capitalize ${
+                              application.status === 'approved' ? 'text-green-600' :
+                              application.status === 'rejected' ? 'text-red-600' :
+                              application.status === 'requested_onboarding' ? 'text-blue-600' :
+                              'text-yellow-600'
+                            }`}>
+                              {application.status.replace('_', ' ')}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              • Submitted on {application.submittedAt}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
-          {filteredApplications.length === 0 && !isLoading && (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No applications found</p>
-            </div>
-          )}
-        </div>
+                    {/* Documents Status */}
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Documents Status</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {application.documents.map((doc, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 p-2 rounded-lg bg-gray-50"
+                          >
+                            <FileText className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-600">{doc.type}</span>
+                            <span className={`text-xs px-2 py-1 rounded-full ml-auto ${
+                              doc.status === 'verified' ? 'bg-green-100 text-green-600' :
+                              doc.status === 'rejected' ? 'bg-red-100 text-red-600' :
+                              'bg-yellow-100 text-yellow-600'
+                            }`}>
+                              {doc.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+            <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Applications Found</h3>
+            <p className="text-gray-500 mb-6">You haven't submitted any restaurant applications yet.</p>
+            <Button
+              onClick={() => navigate('/restaurants/new')}
+              variant="primary"
+            >
+              Submit New Application
+            </Button>
+          </div>
+        )}
       </motion.div>
     </div>
   );

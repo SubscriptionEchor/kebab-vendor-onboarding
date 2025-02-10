@@ -152,11 +152,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   }, [application]);
 
   const resetApplication = () => {
-    console.log('Resetting application state');
-    setApplication(null);
-    setCurrentStep(1);
-    window.localStorage.removeItem('restaurantApplication');
-    sessionStorage.removeItem('currentStep');
+    // This function is now only used internally
+    // and should not be exposed to components
   };
 
   const submitApplication = async (): Promise<RestaurantApplicationResponse> => {
@@ -164,7 +161,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       console.error('No application data to submit');
       throw new Error('Please fill in all required information before submitting.');
     }
-    // console.log('Submitting application data:', application);
     console.log('Cuisines being submitted:', application.cuisines);
 
     const token = localStorage.getItem('authToken');
@@ -314,8 +310,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
 
       console.log('Application submitted successfully:', response);
       showToast('Application submitted successfully!', 'success');
-      // Only clear storage after successful submission
-      resetApplication();
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
       console.error('Submission failed:', error);
@@ -337,8 +331,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       } else {
         errorMessage += 'An unexpected error occurred.';
       }
-      
-      // Keep the data in storage if submission fails
       showToast(errorMessage, 'error');
       throw new Error(errorMessage);
     }
