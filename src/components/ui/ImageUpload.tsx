@@ -1,9 +1,12 @@
-import { useState, useRef, useCallback } from 'react';
-import { Upload, X, Image as ImageIcon, FileText } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useFileUpload } from '../../hooks/useFileUpload';
-import { FILE_SIZE_LIMITS, ALLOWED_FILE_TYPES } from '../../utils/fileValidation';
-import { ErrorAlert } from './ErrorAlert';
+import { useState, useRef, useCallback } from "react";
+import { Upload, X, Image as ImageIcon, FileText } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useFileUpload } from "../../hooks/useFileUpload";
+import {
+  FILE_SIZE_LIMITS,
+  ALLOWED_FILE_TYPES,
+} from "../../utils/fileValidation";
+import { ErrorAlert } from "./ErrorAlert";
 
 interface ImageUploadProps {
   label: string;
@@ -22,7 +25,7 @@ export function ImageUpload({
   onImagesChange,
   acceptDocuments = false,
   required,
-  className = '',
+  className = "",
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -31,12 +34,16 @@ export function ImageUpload({
   const { upload, isUploading, progress, error } = useFileUpload({
     validationOptions: {
       maxSize: FILE_SIZE_LIMITS.RESTAURANT_IMAGE,
-      allowedTypes: acceptDocuments ? ALLOWED_FILE_TYPES.DOCUMENTS : ALLOWED_FILE_TYPES.IMAGES,
+      allowedTypes: acceptDocuments
+        ? ALLOWED_FILE_TYPES.DOCUMENTS
+        : ALLOWED_FILE_TYPES.IMAGES,
       // Only apply dimension restrictions for images
-      ...(acceptDocuments ? {} : {
-        minWidth: 800,
-        minHeight: 600,
-      }),
+      ...(acceptDocuments
+        ? {}
+        : {
+            minWidth: 800,
+            minHeight: 600,
+          }),
     },
     maxFiles: maxImages,
     onSuccess: (urls) => {
@@ -58,7 +65,7 @@ export function ImageUpload({
     try {
       await upload(files);
     } catch (error) {
-      console.error('Failed to upload files:', error);
+      console.error("Failed to upload files:", error);
       if (error instanceof Error) {
         setUploadError(error.message);
       }
@@ -78,8 +85,10 @@ export function ImageUpload({
     try {
       await upload(files);
     } catch (error) {
-      console.error('Failed to upload files:', error);
-      setUploadError(error instanceof Error ? error.message : 'Failed to upload files');
+      console.error("Failed to upload files:", error);
+      setUploadError(
+        error instanceof Error ? error.message : "Failed to upload files"
+      );
     }
   };
 
@@ -92,17 +101,19 @@ export function ImageUpload({
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
-      
+
       {uploadError && (
         <ErrorAlert
           message={uploadError}
           onClose={() => setUploadError(null)}
         />
       )}
-      
+
       <div
         className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
-          isDragging ? 'border-brand-primary bg-brand-primary/5' : 'border-gray-300'
+          isDragging
+            ? "border-brand-primary bg-brand-primary/5"
+            : "border-gray-300"
         }`}
         onDragOver={(e) => {
           e.preventDefault();
@@ -119,7 +130,7 @@ export function ImageUpload({
           multiple
           onChange={handleFileChange}
         />
-        
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <AnimatePresence>
             {images.map((image, index) => (
@@ -130,13 +141,14 @@ export function ImageUpload({
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="relative aspect-square rounded-lg overflow-hidden group"
               >
-                {image.previewUrl.endsWith('.pdf') ? (
+                {typeof image?.previewUrl === "string" &&
+                image.previewUrl.endsWith(".pdf") ? (
                   <div className="w-full h-full bg-gray-100 flex items-center justify-center">
                     <FileText className="w-12 h-12 text-gray-400" />
                   </div>
                 ) : (
                   <img
-                    src={image.previewUrl}
+                    src={image?.previewUrl || ""}
                     alt={`Upload ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
@@ -158,7 +170,7 @@ export function ImageUpload({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className={`w-full py-4 flex flex-col items-center justify-center text-gray-500 hover:text-gray-600 transition-colors ${
-              isUploading ? 'opacity-50 cursor-not-allowed' : ''
+              isUploading ? "opacity-50 cursor-not-allowed" : ""
             }`}
             disabled={isUploading}
           >
@@ -168,7 +180,9 @@ export function ImageUpload({
               <Upload className="w-8 h-8 mb-2" />
             )}
             <span className="text-sm font-medium">
-              {isUploading ? `Uploading... ${Object.values(progress)[0]}%` : 'Drop images here or click to upload'}
+              {isUploading
+                ? `Uploading... ${Object.values(progress)[0]}%`
+                : "Drop images here or click to upload"}
             </span>
             <span className="text-xs mt-1">
               {images.length} of {maxImages} images uploaded

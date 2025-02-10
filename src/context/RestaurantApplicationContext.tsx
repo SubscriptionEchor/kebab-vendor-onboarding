@@ -164,7 +164,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       console.error('No application data to submit');
       throw new Error('Please fill in all required information before submitting.');
     }
-    console.log('Submitting application data:', application);
+    // console.log('Submitting application data:', application);
+    console.log('Cuisines being submitted:', application.cuisines);
 
     const token = localStorage.getItem('authToken');
     if (!token) {
