@@ -79,6 +79,8 @@ export interface RestaurantApplicationResponse {
 
 export interface RestaurantApplicationContextType {
   application: RestaurantApplication | null;
+  currentStep: number;
+  setCurrentStep: (step: number) => void;
   updateApplication: (data: Partial<RestaurantApplication>) => void;
   resetApplication: () => void;
   submitApplication: () => Promise<RestaurantApplicationResponse>;

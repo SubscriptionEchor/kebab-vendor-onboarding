@@ -46,14 +46,32 @@ type WeekSchedule = {
 const DEFAULT_CUISINE_TYPE = "Other";
 
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
-  const [restaurantImages, setRestaurantImages] = useState<{ key: string; previewUrl: string }[]>([]);
-  const [menuImages, setMenuImages] = useState<{ key: string; previewUrl: string }[]>([]);
-  const [profileImage, setProfileImage] = useState<{ key: string; previewUrl: string }[]>([]);
+  const { application, updateApplication } = useRestaurantApplication();
+  
+  const [restaurantImages, setRestaurantImages] = useState(() => 
+    application?.restaurantImages?.map(img => ({
+      key: typeof img === 'string' ? img : img.key,
+      previewUrl: typeof img === 'string' ? img : img.previewUrl
+    })) || []
+  );
+  
+  const [menuImages, setMenuImages] = useState(() =>
+    application?.menuImages?.map(img => ({
+      key: typeof img === 'string' ? img : img.key,
+      previewUrl: typeof img === 'string' ? img : img.previewUrl
+    })) || []
+  );
+  
+  const [profileImage, setProfileImage] = useState(() =>
+    application?.profileImage ? [{
+      key: typeof application.profileImage === 'string' ? application.profileImage : application.profileImage.key,
+      previewUrl: typeof application.profileImage === 'string' ? application.profileImage : application.profileImage.previewUrl
+    }] : []
+  );
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
-  const { application, updateApplication } = useRestaurantApplication();
   const [isInitialized, setIsInitialized] = useState(false);
   
   // Initialize form data from application context

@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Store, UtensilsCrossed, FileText } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { RestaurantInfoStep } from './steps/RestaurantInfoStep';
 import { MenuDetailsStep } from './steps/MenuDetailsStep';
 import { DocumentsStep } from './steps/DocumentsStep';
+import { useRestaurantApplication } from '../../context/RestaurantApplicationContext';
 
 const steps = [
   { id: 1, title: 'Restaurant Information', icon: Store },
@@ -13,7 +13,7 @@ const steps = [
 ];
 
 export function RestaurantRegistrationPage() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const { currentStep, setCurrentStep } = useRestaurantApplication();
 
   const handleNext = () => {
     setCurrentStep((prev) => Math.min(prev + 1, steps.length));

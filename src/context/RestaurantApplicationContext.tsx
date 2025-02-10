@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useToast } from './ToastContext';
 import type { RestaurantApplication, RestaurantApplicationContextType, RestaurantApplicationResponse } from '../types/restaurant';
@@ -84,16 +84,38 @@ const RestaurantApplicationContext = createContext<RestaurantApplicationContextT
 
 export function RestaurantApplicationProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToast();
-  const [application, setApplication] = useLocalStorage<RestaurantApplication | null>(
-    'restaurantApplication',
-    defaultApplication
-  );
+  const [application, setApplication] = useState<RestaurantApplication | null>(() => {
+    // Try to load saved application data on mount
+    try {
+      const savedData = localStorage.getItem('restaurantApplication');
+      return savedData ? JSON.parse(savedData) : defaultApplication;
+    } catch (error) {
+      console.error('Failed to load saved application:', error);
+      return defaultApplication;
+    }
+  });
+
+  const [currentStep, setCurrentStep] = useState(1);
+
+  // Load current step from sessionStorage
+  useEffect(() => {
+    const savedStep = sessionStorage.getItem('currentStep');
+    if (savedStep) {
+      setCurrentStep(parseInt(savedStep, 10));
+    }
+  }, []);
+
+  // Save current step to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('currentStep', currentStep.toString());
+  }, [currentStep]);
 
   // Listen for beforeunload event to save data before refresh
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (application) {
         localStorage.setItem('restaurantApplication', JSON.stringify(application));
+        sessionStorage.setItem('currentStep', currentStep.toString());
       }
     };
 
@@ -104,26 +126,37 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   const updateApplication = (data: Partial<RestaurantApplication>) => {
     console.log('Updating application with:', data);
     setApplication(prev => {
-      if (!prev) {
-        const newApplication = { ...defaultApplication, ...data };
-        console.log('Creating new application:', newApplication);
-        return newApplication;
-      }
+      if (!prev) return { ...defaultApplication, ...data };
+      const currentApplication = prev || defaultApplication;
 
       const updatedApplication = {
-        ...prev,
+        ...currentApplication,
         ...data,
-        openingTimes: Array.isArray(data.openingTimes) ? data.openingTimes : prev.openingTimes || []
+        // Preserve arrays if not provided in update
+        beneficialOwners: data.beneficialOwners || currentApplication.beneficialOwners,
+        restaurantImages: data.restaurantImages || currentApplication.restaurantImages,
+        menuImages: data.menuImages || currentApplication.menuImages,
+        cuisines: data.cuisines || currentApplication.cuisines,
+        openingTimes: data.openingTimes || currentApplication.openingTimes
       };
       console.log('Updated application state:', updatedApplication);
       return updatedApplication;
     });
   };
 
+  // Auto-save to localStorage whenever application changes
+  useEffect(() => {
+    if (application) {
+      localStorage.setItem('restaurantApplication', JSON.stringify(application));
+    }
+  }, [application]);
+
   const resetApplication = () => {
     console.log('Resetting application state');
     setApplication(null);
+    setCurrentStep(1);
     window.localStorage.removeItem('restaurantApplication');
+    sessionStorage.removeItem('currentStep');
   };
 
   const submitApplication = async (): Promise<RestaurantApplicationResponse> => {
@@ -131,6 +164,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       console.error('No application data to submit');
       throw new Error('Please fill in all required information before submitting.');
     }
+    console.log('Submitting application data:', application);
 
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -138,6 +172,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       throw new Error('Your session has expired. Please log in again.');
     }
 
+    // Validate required fields
     // Validate required fields
     const requiredFields = {
       'Restaurant Name': application.restaurantName,
@@ -149,8 +184,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       'Menu Images': application.menuImages?.length >= 1,
       'Profile Image': application.profileImage,
       'Cuisines': application.cuisines?.length === 3,
-      'Business Documents': application.businessDocuments.hospitalityLicense &&
-                          application.businessDocuments.registrationCertificate,
+      'Hospitality License': application.businessDocuments.hospitalityLicense,
+      'Registration Certificate': application.businessDocuments.registrationCertificate,
       'Opening Hours': application.openingTimes?.length === 7,
       'Primary Owner': application.beneficialOwners?.some(owner => owner.isPrimary),
     };
@@ -159,6 +194,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       .filter(([_, value]) => !value)
       .map(([field]) => field);
 
+    console.log('Checking required fields:', missingFields);
     if (missingFields.length > 0) {
       throw new Error(`Please complete all required fields: ${missingFields.join(', ')}`);
     }
@@ -166,15 +202,19 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     console.log('Submitting application:', application);
     try {
       // Format application data for API submission
+      console.log('Formatting application data for submission...');
       const applicationInput = {
-        beneficialOwners: application.beneficialOwners.map(owner => ({
-          name: owner.name.trim(),
-          passportId: owner.passportId.trim(),
-          email: owner.email.trim(),
-          phone: owner.phone,
-          isPrimary: owner.isPrimary,
-          idCardDocuments: owner.idCardDocuments || []
-        })),
+        beneficialOwners: application.beneficialOwners.map(owner => {
+          console.log('Processing owner:', owner);
+          return {
+            name: owner.name.trim(),
+            passportId: owner.passportId.trim(),
+            email: owner.email.trim(),
+            phone: formatPhoneNumber(owner.phone, owner.countryCode),
+            isPrimary: owner.isPrimary,
+            idCardDocuments: owner.idCardDocuments?.filter(Boolean) || []
+          };
+        }),
         companyName: application.companyName.trim(),
         restaurantName: application.restaurantName.trim(),
         restaurantContactInfo: {
@@ -253,6 +293,10 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       }
 
       console.log('Formatted application data:', applicationInput);
+      console.log('Sending application to API...');
+
+      // Log ID card documents before submission
+      console.log('ID Card Documents being submitted:', applicationInput.beneficialOwners.map(owner => owner.idCardDocuments));
 
       const response = await graphqlRequest<{ createRestaurantOnboardingApplication: RestaurantApplicationResponse }>(
         CREATE_APPLICATION,
@@ -267,7 +311,9 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         }
       );
 
+      console.log('Application submitted successfully:', response);
       showToast('Application submitted successfully!', 'success');
+      // Only clear storage after successful submission
       resetApplication();
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
@@ -275,6 +321,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       let errorMessage = 'Failed to submit application. ';
       
       if (error instanceof Error) {
+        console.error('Submission error details:', error);
         if (error.message.includes('validation')) {
           errorMessage += 'Please check all required fields are filled correctly.';
         } else if (error.message.includes('401')) {
@@ -290,6 +337,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         errorMessage += 'An unexpected error occurred.';
       }
       
+      // Keep the data in storage if submission fails
       showToast(errorMessage, 'error');
       throw new Error(errorMessage);
     }
@@ -299,6 +347,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     <RestaurantApplicationContext.Provider
       value={{
         application,
+        currentStep,
+        setCurrentStep,
         updateApplication,
         resetApplication,
         submitApplication,

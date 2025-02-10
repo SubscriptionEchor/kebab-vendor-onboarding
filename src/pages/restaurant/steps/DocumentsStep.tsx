@@ -169,18 +169,29 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       // Prepare application data with proper formatting
       const applicationData = {
         beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-          ...owner,
-          idCardDocuments: documents.idCards.map(doc => doc.key)
+          name: owner.name,
+          passportId: owner.passportId,
+          email: owner.email,
+          phone: owner.phone,
+          isPrimary: owner.isPrimary,
+          idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : owner.idCardDocuments || []
         })) || [],
         businessDocuments: {
           hospitalityLicense: documents.hospitalityLicense[0]?.key,
           registrationCertificate: documents.registrationCertificate[0]?.key,
           taxId: {
             documentNumber: 'default',
-            documentUrl: documents.taxDocument[0]?.key,
+            documentUrl: documents.taxDocument[0]?.key
           },
+          bankDetails: {
+            ...application?.businessDocuments.bankDetails,
+            documentUrl: documents.bankDocument[0]?.key || ''
+          }
         }
       };
+
+      console.log('Submitting application with ID cards:', documents.idCards.map(doc => doc.key));
+      console.log('Application data being submitted:', applicationData);
 
       // Update application state
       await updateApplication(applicationData);
@@ -201,6 +212,27 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const handleGoHome = () => {
     navigate('/dashboard');
   };
+
+  // Save documents to localStorage whenever they change
+  useEffect(() => {
+    if (Object.values(documents).some(arr => arr.length > 0)) {
+      console.log('Saving documents to localStorage:', documents);
+      localStorage.setItem('restaurantDocuments', JSON.stringify(documents));
+    }
+  }, [documents]);
+
+  // Load documents from localStorage on mount
+  useEffect(() => {
+    const savedDocuments = localStorage.getItem('restaurantDocuments');
+    if (savedDocuments) {
+      try {
+        const parsedDocuments = JSON.parse(savedDocuments);
+        setDocuments(parsedDocuments);
+      } catch (error) {
+        console.error('Failed to parse saved documents:', error);
+      }
+    }
+  }, []);
 
   const documentTypes = [
     {

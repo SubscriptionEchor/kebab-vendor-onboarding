@@ -184,12 +184,14 @@ interface RestaurantInfoStepProps {
   onNext: () => void;
 }
 
-export const RequiredLabel = ({ children }: { children: React.ReactNode }) => (
+export function RequiredLabel({ children }: { children: React.ReactNode }) {
+  return (
   <div className="flex items-center gap-1 mb-1">
     <span className="text-sm font-medium text-gray-700">{children}</span>
     <Asterisk className="w-3 h-3 text-red-500" />
   </div>
-);
+  );
+}
 
 export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const [formData, setFormData] = useState({
