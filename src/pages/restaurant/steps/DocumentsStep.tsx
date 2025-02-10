@@ -11,6 +11,8 @@ import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { Input } from '../../../components/ui/Input';
 import { SuccessDialog } from '../../../components/ui/SuccessDialog';
+import { useLocation } from 'react-router-dom';
+import { resubmitApplication } from '../../../services/restaurant';
 import { ImageUpload } from '../../../components/ui/ImageUpload';
 
 interface DocumentsStepProps {
@@ -29,6 +31,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const location = useLocation();
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
 
   // Initialize documents state from application
@@ -134,6 +137,21 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     e.preventDefault();
     clearErrors();
     setErrors([]);
+
+    const searchParams = new URLSearchParams(location.search);
+    let applicationId = searchParams.get('edit');
+
+    // Ensure applicationId is a valid string
+    if (!applicationId || typeof applicationId !== 'string') {
+      console.error('Invalid application ID:', applicationId);
+      setErrors(['Invalid application ID']);
+      return;
+    }
+
+    // Clean the ID - remove any whitespace or special characters
+    applicationId = applicationId.trim();
+
+    console.log('Processing application with ID:', applicationId);
     
     console.log('Current documents state:', documents);
     console.log('ID Cards available:', documents.idCards);
@@ -171,30 +189,36 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       // Prepare application data with proper formatting
       const applicationData = {
-        beneficialOwners: (application?.beneficialOwners || []).map(owner => {
-          const ownerIdCards = owner.isPrimary ? documents.idCards.map(doc => doc.key) : [];
-          // Ensure we have the ID card documents for primary owner
-          if (owner.isPrimary && documents.idCards.length > 0) {
-            console.log('Setting ID cards for primary owner:', documents.idCards.map(doc => doc.key));
-            return {
-              name: owner.name,
-              passportId: owner.passportId,
-              email: owner.email,
-              phone: owner.phone,
-              isPrimary: true,
-              idCardDocuments: documents.idCards.map(doc => doc.key)
-            };
-          }
-          
-          return {
-            name: owner.name,
-            passportId: owner.passportId,
-            email: owner.email,
-            phone: owner.phone,
-            isPrimary: false,
-            idCardDocuments: []
-          };
-        }),
+        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
+          name: owner.name,
+          passportId: owner.passportId,
+          email: owner.email,
+          phone: owner.phone,
+          isPrimary: owner.isPrimary,
+          idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : []
+        })),
+        // Ensure location and coordinates are included
+        location: {
+          coordinates: {
+            type: 'Point',
+            coordinates: [
+              parseFloat(application.location.coordinates.coordinates[0].toFixed(6)),
+              parseFloat(application.location.coordinates.coordinates[1].toFixed(6))
+            ]
+          },
+          address: application.location.address
+        },
+        companyName: application.companyName,
+        restaurantName: application.restaurantName,
+        restaurantContactInfo: {
+          email: application.restaurantContactInfo.email,
+          phone: application.restaurantContactInfo.phone
+        },
+        restaurantImages: application.restaurantImages,
+        menuImages: application.menuImages,
+        profileImage: application.profileImage,
+        cuisines: application.cuisines,
+        openingTimes: application.openingTimes,
         businessDocuments: {
           hospitalityLicense: documents.hospitalityLicense[0]?.key,
           registrationCertificate: documents.registrationCertificate[0]?.key,
@@ -224,10 +248,14 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       // Update application state
       await updateApplication(applicationData);
-      
-      // Submit the application
-      await submitApplication();
-      setShowSuccess(true);
+
+      // If we have an application ID, resubmit, otherwise create new
+      if (applicationId) {
+        await resubmitApplication(applicationId, applicationData);
+      } else {
+        await submitApplication();
+      }
+
     } catch (error) {
       console.error('Submission failed:', error);
       if (error instanceof Error) {
@@ -239,10 +267,11 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   };
 
   const handleGoHome = () => {
-    // Clear application state after successful submission
+    // Clear all application-related storage
     window.localStorage.removeItem('restaurantApplication');
     window.localStorage.removeItem('restaurantDocuments');
     window.sessionStorage.removeItem('currentStep');
+    window.localStorage.removeItem('cachedCuisines');
     navigate('/dashboard');
   };
 

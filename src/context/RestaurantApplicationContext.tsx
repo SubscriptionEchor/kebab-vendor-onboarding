@@ -161,7 +161,19 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       console.error('No application data to submit');
       throw new Error('Please fill in all required information before submitting.');
     }
-    console.log('Cuisines being submitted:', application.cuisines);
+    
+    // Check if this is a new application or resubmission
+    const searchParams = new URLSearchParams(window.location.search);
+    const isResubmission = searchParams.has('edit');
+
+    if (isResubmission) {
+      const applicationId = searchParams.get('edit');
+      if (!applicationId) {
+        throw new Error('Invalid application ID for resubmission');
+      }
+      // For resubmission, use the resubmitApplication function
+      return resubmitApplication(applicationId, application);
+    }
 
     const token = localStorage.getItem('authToken');
     if (!token) {

@@ -37,6 +37,15 @@ export function ApplicationsPage() {
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleEditApplication = (applicationId: string) => {
+    // Load the application data into the form context
+    const application = applications.find(app => app.id === applicationId);
+    if (application) {
+      // Navigate to the edit form
+      navigate(`/restaurants/new?edit=${applicationId}`);
+    }
+  };
+
   const fetchApplicationData = async () => {
     if (!localStorage.getItem('authToken')) {
       setIsLoading(false);
@@ -134,13 +143,17 @@ export function ApplicationsPage() {
   const getStatusIcon = (status: Application['status']) => {
     switch (status) {
       case 'requested_onboarding':
-        return { icon: Clock, color: 'text-blue-500' };
+        return { icon: Clock, color: 'text-blue-500', bgColor: 'blue' };
+      case 'requested_changes':
+        return { icon: AlertCircle, color: 'text-orange-500', bgColor: 'orange' };
       case 'pending':
-        return { icon: Clock, color: 'text-yellow-500' };
+        return { icon: Clock, color: 'text-yellow-500', bgColor: 'yellow' };
       case 'approved':
-        return { icon: CheckCircle2, color: 'text-green-500' };
+        return { icon: CheckCircle2, color: 'text-green-500', bgColor: 'green' };
       case 'rejected':
-        return { icon: XCircle, color: 'text-red-500' };
+        return { icon: XCircle, color: 'text-red-500', bgColor: 'red' };
+      default:
+        return { icon: Clock, color: 'text-gray-500', bgColor: 'gray' };
     }
   };
 
@@ -243,22 +256,33 @@ export function ApplicationsPage() {
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-start gap-4">
-                        <div className={`w-10 h-10 rounded-lg bg-${color.split('-')[1]}-100 flex items-center justify-center`}>
+                        <div className={`w-10 h-10 rounded-lg bg-${getStatusIcon(application.status).bgColor}-100 flex items-center justify-center`}>
                           <Building2 className={`w-5 h-5 ${color}`} />
                         </div>
                         <div>
                           <h3 className="font-medium text-gray-900">{application.restaurantName}</h3>
                           <p className="text-sm text-gray-500">{application.address}</p>
                           <div className="flex items-center gap-2 mt-1">
-                            <StatusIcon className={`w-4 h-4 ${color}`} />
+                            {StatusIcon && <StatusIcon className={`w-4 h-4 ${color}`} />}
                             <span className={`text-sm font-medium capitalize ${
                               application.status === 'approved' ? 'text-green-600' :
                               application.status === 'rejected' ? 'text-red-600' :
+                              application.status === 'requested_changes' ? 'text-orange-600' :
                               application.status === 'requested_onboarding' ? 'text-blue-600' :
                               'text-yellow-600'
                             }`}>
                               {application.status.replace('_', ' ')}
                             </span>
+                            {application.status === 'requested_changes' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditApplication(application.id)}
+                                className="ml-4"
+                              >
+                                Edit Application
+                              </Button>
+                            )}
                             <span className="text-sm text-gray-500">
                               • Submitted on {application.submittedAt}
                             </span>

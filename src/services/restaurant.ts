@@ -74,6 +74,78 @@ const UPLOAD_DOCUMENT = `
   }
 `;
 
+const GET_APPLICATION_BY_ID = `
+  query GetRestaurantOnboardingApplicationById($applicationId: String!) {
+    getRestaurantOnboardingApplicationById(applicationId: $applicationId) {
+      restaurantId
+      profileImage
+      _id
+      potentialVendor
+      beneficialOwners {
+        name
+        passportId
+        email
+        phone
+        isPrimary
+        emailVerified
+        idCardDocuments
+      }
+      companyName
+      restaurantName
+      restaurantContactInfo {
+        email
+        phone
+        emailVerified
+      }
+      location {
+        coordinates {
+          coordinates
+        }
+        address
+      }
+      restaurantImages
+      menuImages
+      cuisines
+      openingTimes {
+        day
+        times {
+          startTime
+          endTime
+        }
+        isOpen
+      }
+      businessDocuments {
+        hospitalityLicense
+        registrationCertificate
+        bankDetails {
+          accountNumber
+          bankName
+          branchName
+          bankIdentifierCode
+          accountHolderName
+          documentUrl
+        }
+        taxId {
+          documentNumber
+          documentUrl
+        }
+      }
+    }
+  }
+`;
+
+const RESUBMIT_APPLICATION = `
+  mutation ResubmitRestaurantOnboardingApplication($applicationId: ID!, $input: RestaurantOnboardingApplicationInput!) {
+    resubmitRestaurantOnboardingApplication(applicationId: $applicationId, input: $input) {
+      _id
+      resubmissionCount
+      applicationStatus
+      restaurantName
+      createdAt
+    }
+  }
+`;
+
 export interface CreateRestaurantInput {
   name: string;
   email: string;
@@ -174,6 +246,77 @@ export async function getApplications(token: string) {
       localStorage.removeItem('authToken');
       throw new Error('Session expired');
     }
+    throw error;
+  }
+}
+
+export async function resubmitApplication(applicationId: string, input: any) {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  // Ensure coordinates are properly formatted
+  if (input.location?.coordinates) {
+    input.location.coordinates = {
+      type: 'Point',
+      coordinates: [
+        parseFloat(input.location.coordinates.coordinates[0].toFixed(6)),
+        parseFloat(input.location.coordinates.coordinates[1].toFixed(6))
+      ]
+    };
+  }
+
+  console.log('Resubmitting application with data:', {
+    applicationId,
+    input
+  });
+
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+    'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+    'Priority': 'u=1, i'
+  };
+
+  try {
+    const response = await graphqlRequest(
+      RESUBMIT_APPLICATION,
+      { applicationId, input },
+      headers
+    );
+    return response.resubmitRestaurantOnboardingApplication;
+  } catch (error) {
+    console.error('Failed to resubmit application:', error);
+    throw error;
+  }
+}
+export async function getApplicationById(applicationId: string) {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+    'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+    'Priority': 'u=1, i'
+  };
+
+  try {
+    const response = await graphqlRequest(
+      GET_APPLICATION_BY_ID,
+      { applicationId },
+      headers
+    );
+    return response.getRestaurantOnboardingApplicationById;
+  } catch (error) {
+    console.error('Failed to fetch application:', error);
     throw error;
   }
 }

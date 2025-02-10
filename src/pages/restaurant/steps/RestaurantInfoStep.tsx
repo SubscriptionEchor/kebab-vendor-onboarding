@@ -327,10 +327,18 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     }
   }, [application]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
     
+    // Ensure coordinates are properly formatted as numbers
+    const coordinates = {
+      lng: typeof formData.location.lng === 'string' ? 
+        parseFloat(formData.location.lng) : formData.location.lng,
+      lat: typeof formData.location.lat === 'string' ? 
+        parseFloat(formData.location.lat) : formData.location.lat
+    };
+
     // Format address into a single string
     const formattedAddress = [
       formData.address.street,
@@ -398,11 +406,9 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         location: {
           coordinates: {
             type: 'Point' as const,
-            // Ensure coordinates are properly rounded to 6 decimal places
-            coordinates: [
-              parseFloat(formData.location.lng.toFixed(6)),
-              parseFloat(formData.location.lat.toFixed(6))
-            ]
+            coordinates: [coordinates.lng, coordinates.lat].map(coord => 
+              parseFloat(coord.toFixed(6))
+            )
           },
           address: formattedAddress.trim(),
         },

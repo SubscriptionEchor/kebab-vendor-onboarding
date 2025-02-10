@@ -2,7 +2,7 @@ export interface GetApplicationsResponse {
   getRestaurantOnboardingApplication: Array<{
     _id: string;
     restaurantName: string;
-    applicationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REQUESTED_ONBOARDING';
+    applicationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REQUESTED_ONBOARDING' | 'REQUESTED_CHANGES';
     resubmissionCount: number;
     createdAt: string;
     statusHistory: Array<{
