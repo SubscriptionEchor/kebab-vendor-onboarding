@@ -1,7 +1,7 @@
 import { AuthProvider } from './context/AuthContext';
 import { RestaurantApplicationProvider } from './context/RestaurantApplicationContext';
 import { MainLayout } from './layouts/MainLayout';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { VerifyPhonePage } from './pages/VerifyPhonePage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -33,30 +33,28 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<LoginView />} />
-            <Route path="/verify-phone" element={<VerifyPhonePage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/verify-otp" element={<VerifyOTPPage />} />
-            
-            {/* Protected Routes */}
-            <Route element={<PrivateRoute><RestaurantApplicationProvider><MainLayout /></RestaurantApplicationProvider></PrivateRoute>}>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/restaurants/new" element={<RestaurantRegistrationPage />} />
-              <Route path="/applications" element={<ApplicationsPage />} />
-            </Route>
-            
-            {/* Fallback Route */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </ToastProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <AuthProvider>
+      <ToastProvider>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LoginView />} />
+          <Route path="/verify-phone" element={<VerifyPhonePage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/verify-otp" element={<VerifyOTPPage />} />
+          
+          {/* Protected Routes */}
+          <Route element={<PrivateRoute><RestaurantApplicationProvider><MainLayout /></RestaurantApplicationProvider></PrivateRoute>}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/restaurants/new" element={<RestaurantRegistrationPage />} />
+            <Route path="/applications" element={<ApplicationsPage />} />
+          </Route>
+          
+          {/* Fallback Route */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </ToastProvider>
+    </AuthProvider>
   );
 
 }

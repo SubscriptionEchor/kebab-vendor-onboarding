@@ -71,10 +71,6 @@ export async function graphqlRequest<T>(
     const result = await response.json() as APIResponse<T>;
     
     // Log response only in development
-    if (process.env.NODE_ENV === 'development') {
-      console.debug('GraphQL Response:', result);
-    }
-
     if (result.errors) {
       const errorMessage = result.errors[0]?.message || 'An error occurred';
       if (errorMessage.toLowerCase().includes('unauthorized')) {
@@ -87,7 +83,16 @@ export async function graphqlRequest<T>(
           .join('. ');
         throw new Error(`Validation failed: ${validationErrors}`);
       }
+      // Handle internal server errors with more detail
+      if (errorMessage.includes('Internal Server Error')) {
+        console.error('GraphQL Error Details:', result.errors);
+        throw new Error('The server encountered an error. Please try again later.');
+      }
       throw new Error(errorMessage);
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('GraphQL Response:', result);
     }
 
     return result.data;

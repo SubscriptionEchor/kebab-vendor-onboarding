@@ -305,7 +305,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       console.log('Sending application to API...');
 
       // Log ID card documents before submission
-      console.log('ID Card Documents being submitted:', applicationInput.beneficialOwners.map(owner => owner.idCardDocuments));
+      console.log('ID Card Documents being submitted:', JSON.stringify(applicationInput.beneficialOwners.map(owner => owner.idCardDocuments), null, 2));
 
       const response = await graphqlRequest<{ createRestaurantOnboardingApplication: RestaurantApplicationResponse }>(
         CREATE_APPLICATION,
@@ -320,15 +320,19 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         }
       );
 
-      console.log('Application submitted successfully:', response);
+      console.log('Application submitted successfully:', JSON.stringify(response, null, 2));
       showToast('Application submitted successfully!', 'success');
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
-      console.error('Submission failed:', error);
+      console.error('Submission failed:', error instanceof Error ? error.message : 'Unknown error');
       let errorMessage = 'Failed to submit application. ';
       
       if (error instanceof Error) {
-        console.error('Submission error details:', error);
+        console.error('Submission error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
         if (error.message.includes('validation')) {
           errorMessage += 'Please check all required fields are filled correctly.';
         } else if (error.message.includes('401')) {

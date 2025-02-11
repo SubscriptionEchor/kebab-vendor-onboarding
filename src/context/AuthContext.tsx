@@ -18,32 +18,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cuisines, setCuisines] = useState<Array<{ name: string }>>([]);
 
   const fetchCuisines = async (token: string) => {
+    // If we already have cuisines, don't fetch again
+    if (cuisines.length > 0) return;
+
+    // Try to load from cache first
+    const cachedCuisines = localStorage.getItem('cachedCuisines');
+    if (cachedCuisines) {
+      try {
+        const parsed = JSON.parse(cachedCuisines);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCuisines(parsed);
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to parse cached cuisines:', error);
+      }
+    }
+
     try {
       const response = await getCuisines();
       if (response?.vendorOnboardingBootstrap?.cuisines) {
         const uniqueCuisines = Array.from(
           new Set(response.vendorOnboardingBootstrap.cuisines.map(c => c.name))
         ).map(name => ({ name }));
+        
+        // Only update if we got valid data
+        if (uniqueCuisines.length > 0) {
         setCuisines(uniqueCuisines);
-        // Cache cuisines in localStorage
         localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
+        }
       }
     } catch (error) {
-      console.error('Failed to fetch cuisines:', error);
+      // Provide default cuisines if fetch fails
+      const defaultCuisines = [
+        { name: 'Turkish' },
+        { name: 'Indian' },
+        { name: 'Italian' },
+        { name: 'German' },
+        { name: 'Mediterranean' },
+        { name: 'Asian' },
+        { name: 'Middle Eastern' },
+        { name: 'International' }
+      ];
+      
+      console.warn('Failed to fetch cuisines, using defaults:', error);
+      setCuisines(defaultCuisines);
+      localStorage.setItem('cachedCuisines', JSON.stringify(defaultCuisines));
     }
   };
 
-  // Load cached cuisines on mount
-  useEffect(() => {
-    const cachedCuisines = localStorage.getItem('cachedCuisines');
-    if (cachedCuisines) {
-      setCuisines(JSON.parse(cachedCuisines));
-    }
-  }, []);
-
   // Fetch cuisines when auth token changes
   useEffect(() => {
-    if (authToken && cuisines.length === 0) {
+    if (authToken) {
       fetchCuisines(authToken);
     }
   }, [authToken, cuisines.length]);

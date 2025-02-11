@@ -257,20 +257,64 @@ export async function resubmitApplication(applicationId: string, input: any) {
   }
 
   // Ensure coordinates are properly formatted
-  if (input.location?.coordinates) {
+  if (input.location?.coordinates?.coordinates) {
     input.location.coordinates = {
       type: 'Point',
       coordinates: [
-        parseFloat(input.location.coordinates.coordinates[0].toFixed(6)),
-        parseFloat(input.location.coordinates.coordinates[1].toFixed(6))
+        parseFloat(Number(input.location.coordinates.coordinates[0]).toFixed(6)),
+        parseFloat(Number(input.location.coordinates.coordinates[1]).toFixed(6))
       ]
     };
   }
 
-  console.log('Resubmitting application with data:', {
-    applicationId,
-    input
-  });
+  // Format all document URLs to ensure they're strings
+  if (input.businessDocuments) {
+    input.businessDocuments = {
+      ...input.businessDocuments,
+      hospitalityLicense: getDocumentKey(input.businessDocuments.hospitalityLicense),
+      registrationCertificate: getDocumentKey(input.businessDocuments.registrationCertificate),
+      taxId: {
+        ...input.businessDocuments.taxId,
+        documentNumber: input.businessDocuments.taxId?.documentNumber || 'default',
+        documentUrl: getDocumentKey(input.businessDocuments.taxId?.documentUrl)
+      }
+    };
+  }
+
+  // Format all image arrays to ensure they contain only string keys
+  if (input.restaurantImages) {
+    input.restaurantImages = input.restaurantImages
+      .map(img => getDocumentKey(img))
+      .filter(Boolean);
+  }
+
+  if (input.menuImages) {
+    input.menuImages = input.menuImages
+      .map(img => getDocumentKey(img))
+      .filter(Boolean);
+  }
+
+  if (input.profileImage) {
+    input.profileImage = getDocumentKey(input.profileImage);
+  }
+
+  // Format phone numbers
+  if (input.restaurantContactInfo?.phone) {
+    input.restaurantContactInfo.phone = formatPhoneNumber(
+      input.restaurantContactInfo.phone,
+      input.restaurantContactInfo.countryCode || 'DE'
+    );
+  }
+
+  if (input.beneficialOwners) {
+    input.beneficialOwners = input.beneficialOwners.map(owner => ({
+      ...owner,
+      phone: formatPhoneNumber(owner.phone, owner.countryCode || 'DE'),
+      idCardDocuments: (owner.idCardDocuments || [])
+        .map(doc => getDocumentKey(doc))
+        .filter(Boolean)
+    }));
+  }
 
   const headers = {
     'Authorization': `Bearer ${token}`,
@@ -278,21 +322,33 @@ export async function resubmitApplication(applicationId: string, input: any) {
     'Accept-Language': 'en-US,en;q=0.9',
     'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
     'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
-    'Priority': 'u=1, i'
+    'Priority': 'u=1'
   };
 
   try {
+    // Log the formatted data for debugging
+    console.log('Submitting resubmission with formatted data:', JSON.stringify({
+      applicationId,
+      input
+    }, null, 2));
+
     const response = await graphqlRequest(
       RESUBMIT_APPLICATION,
       { applicationId, input },
-      headers
+      headers,
     );
+    console.log('Resubmission successful:', response);
     return response.resubmitRestaurantOnboardingApplication;
   } catch (error) {
-    console.error('Failed to resubmit application:', error);
+    console.error('Failed to resubmit application:', error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    } : 'Unknown error');
     throw error;
   }
 }
+
 export async function getApplicationById(applicationId: string) {
   const token = localStorage.getItem('authToken');
   if (!token) {
@@ -319,4 +375,27 @@ export async function getApplicationById(applicationId: string) {
     console.error('Failed to fetch application:', error);
     throw error;
   }
+}
+
+// Helper function to get document key
+function getDocumentKey(doc: any): string {
+  if (!doc) return '';
+  if (typeof doc === 'string') return doc;
+  if (typeof doc === 'object' && doc.key) return doc.key;
+  return '';
+}
+
+// Helper function to format phone numbers
+function formatPhoneNumber(phone: string, countryCode: string): string {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Keep the phone number as is if it already has a + prefix
+  if (phone.startsWith('+')) return phone;
+  
+  // Format with country code
+  const normalizedPhone = cleanPhone.replace(/^0+/, '');
+  return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
 }
