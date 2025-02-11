@@ -31,8 +31,10 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const location = useLocation();
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
+  const isResubmission = new URLSearchParams(location.search).has('edit');
 
   // Initialize documents state from application
   useEffect(() => {
@@ -75,6 +77,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       }
     }
   }, [application]);
+
   const { errors: validationErrors, validate, clearErrors } = useFormValidation({
     // Only validate required documents
     hospitalityLicense: (value: boolean) => value,
@@ -137,21 +140,10 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     e.preventDefault();
     clearErrors();
     setErrors([]);
-
+    setIsSubmitting(true);
+    
     const searchParams = new URLSearchParams(location.search);
-    let applicationId = searchParams.get('edit');
-
-    // Ensure applicationId is a valid string
-    if (!applicationId || typeof applicationId !== 'string') {
-      console.error('Invalid application ID:', applicationId);
-      setErrors(['Invalid application ID']);
-      return;
-    }
-
-    // Clean the ID - remove any whitespace or special characters
-    applicationId = applicationId.trim();
-
-    console.log('Processing application with ID:', applicationId);
+    const applicationId = searchParams.get('edit');
     
     console.log('Current documents state:', documents);
     console.log('ID Cards available:', documents.idCards);
@@ -248,13 +240,20 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
 
       // Update application state
       await updateApplication(applicationData);
-
-      // If we have an application ID, resubmit, otherwise create new
-      if (applicationId) {
-        await resubmitApplication(applicationId, applicationData);
+      
+      let response;
+      if (isResubmission) {
+        if (!applicationId.trim()) {
+          throw new Error('Invalid application ID for resubmission');
+        }
+        response = await resubmitApplication(applicationId, applicationData);
+        console.log('Application resubmitted successfully:', response);
       } else {
-        await submitApplication();
+        response = await submitApplication();
+        console.log('New application submitted successfully:', response);
       }
+
+      setShowSuccess(true);
 
     } catch (error) {
       console.error('Submission failed:', error);
@@ -263,6 +262,8 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       } else {
         setErrors(['Failed to submit application. Please try again.']);
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -497,12 +498,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           type="button"
           variant="outline"
           size="lg"
+          disabled={isSubmitting}
           onClick={onBack}
         >
           Previous Step
         </Button>
-        <Button type="submit" size="lg">
-          Submit Application
+        <Button type="submit" size="lg" isLoading={isSubmitting}>
+          {isResubmission ? 'Resubmit Application' : 'Submit Application'}
         </Button>
       </div>
 
@@ -511,6 +513,12 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
         isOpen={showSuccess}
         onClose={() => setShowSuccess(false)}
         onGoHome={handleGoHome}
+        title={isResubmission ? 'Application Resubmitted!' : 'Application Submitted!'}
+        message={
+          isResubmission
+            ? "Your updated application has been submitted successfully. We will review the changes and get back to you soon."
+            : "Thank you for your application. Our team will review it within 4-5 business days. We'll notify you once the review is complete."
+        }
       />
     </motion.form>
   );

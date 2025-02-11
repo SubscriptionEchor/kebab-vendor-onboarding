@@ -6,9 +6,17 @@ interface SuccessDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onGoHome: () => void;
+  title?: string;
+  message?: string;
 }
 
-export function SuccessDialog({ isOpen, onClose, onGoHome }: SuccessDialogProps) {
+export function SuccessDialog({
+  isOpen,
+  onClose,
+  onGoHome,
+  title = 'Application Submitted!',
+  message = 'Thank you for your application. Our team will review it within 4-5 business days. We\'ll notify you once the review is complete.'
+}: SuccessDialogProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -44,11 +52,10 @@ export function SuccessDialog({ isOpen, onClose, onGoHome }: SuccessDialogProps)
                 </div>
 
                 <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                  Application Submitted!
+                  {title}
                 </h2>
                 <p className="text-gray-600 mb-6">
-                  Thank you for your application. Our team will review it within 4-5 business days.
-                  We'll notify you once the review is complete.
+                  {message}
                 </p>
 
                 <Button
