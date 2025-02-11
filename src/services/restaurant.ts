@@ -196,7 +196,7 @@ export async function uploadDocument(restaurantId: string, type: string, file: F
 export async function getCuisines() {
   const token = localStorage.getItem('authToken');
   if (!token) {
-    throw new Error('Please log in to continue');
+    throw new Error('Authentication required');
   }
 
   const headers = {
@@ -208,7 +208,15 @@ export async function getCuisines() {
     'Priority': 'u=1, i'
   };
 
-  return graphqlRequest<GetCuisinesResponse>(GET_CUISINES, {}, headers);
+  try {
+    console.log('Fetching cuisines with token:', token);
+    const response = await graphqlRequest<GetCuisinesResponse>(GET_CUISINES, {}, headers);
+    console.log('Cuisine API response:', response);
+    return response;
+  } catch (error) {
+    console.error('Failed to fetch cuisines:', error);
+    throw error;
+  }
 }
 
 export async function getApplications(token: string) {
@@ -281,6 +289,14 @@ export async function resubmitApplication(applicationId: string, input: any) {
     };
   }
 
+  // Ensure cuisines are properly formatted strings
+  if (input.cuisines) {
+    input.cuisines = input.cuisines.map(cuisine => 
+      typeof cuisine === 'string' ? 
+        cuisine.toLowerCase() : 
+        cuisine.name.toLowerCase()
+    );
+  }
   // Format all image arrays to ensure they contain only string keys
   if (input.restaurantImages) {
     input.restaurantImages = input.restaurantImages

@@ -131,9 +131,11 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   // Initialize selected cuisines from application state
   useEffect(() => {
     if (application?.cuisines && cuisines.length > 0) {
-      // Ensure selected cuisines are correctly matched by name
-      const validCuisines = application.cuisines.filter((cuisineName) =>
-        cuisines.some((c) => c.name === cuisineName)
+      // Format existing cuisines to match new structure
+      const validCuisines = application.cuisines.map(cuisine => 
+        typeof cuisine === 'string' ? cuisine : cuisine.name
+      ).filter(cuisineName =>
+        cuisines.some(c => c.name.toLowerCase() === cuisineName.toLowerCase())
       );
       setSelectedCuisines(validCuisines);
     }

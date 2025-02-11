@@ -18,8 +18,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [cuisines, setCuisines] = useState<Array<{ name: string }>>([]);
 
   const fetchCuisines = async (token: string) => {
-    // If we already have cuisines, don't fetch again
-    if (cuisines.length > 0) return;
+    console.log('Starting cuisine fetch with token:', token);
 
     // Try to load from cache first
     const cachedCuisines = localStorage.getItem('cachedCuisines');
@@ -32,11 +31,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.warn('Failed to parse cached cuisines:', error);
+        localStorage.removeItem('cachedCuisines');
       }
     }
 
     try {
       const response = await getCuisines();
+      console.log('Raw cuisine response:', response);
       if (response?.vendorOnboardingBootstrap?.cuisines) {
         const uniqueCuisines = Array.from(
           new Set(response.vendorOnboardingBootstrap.cuisines.map(c => c.name))
@@ -44,10 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Only update if we got valid data
         if (uniqueCuisines.length > 0) {
-        setCuisines(uniqueCuisines);
-        localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
+          console.log('Setting cuisines:', uniqueCuisines);
+          setCuisines(uniqueCuisines);
+          localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
+          return;
         }
       }
+      throw new Error('No cuisine data received from API');
     } catch (error) {
       // Provide default cuisines if fetch fails
       const defaultCuisines = [
@@ -63,14 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       console.warn('Failed to fetch cuisines, using defaults:', error);
       setCuisines(defaultCuisines);
-      localStorage.setItem('cachedCuisines', JSON.stringify(defaultCuisines));
     }
   };
 
   // Fetch cuisines when auth token changes
   useEffect(() => {
     if (authToken) {
-      fetchCuisines(authToken);
+      if (cuisines.length === 0) {
+        console.log('No cuisines loaded, fetching from API');
+        fetchCuisines(authToken);
+      }
     }
   }, [authToken, cuisines.length]);
 
