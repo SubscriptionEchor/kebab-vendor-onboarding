@@ -40,12 +40,12 @@ const defaultApplication: RestaurantApplication = {
   restaurantContactInfo: {
     email: '',
     phone: '',
-    countryCode: 'DE',
+    countryCode: '',
   },
   location: {
     coordinates: {
       type: 'Point',
-      coordinates: [DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat],
+      coordinates: [0, 0],
     },
     address: '',
   },
@@ -54,13 +54,13 @@ const defaultApplication: RestaurantApplication = {
   profileImage: '',
   cuisines: [],
   openingTimes: [
-    { day: 'MON', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
-    { day: 'TUE', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
-    { day: 'WED', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
-    { day: 'THU', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
-    { day: 'FRI', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekday.open], endTime: [DEFAULT_BUSINESS_HOURS.weekday.close] }], isOpen: true },
-    { day: 'SAT', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekend.open], endTime: [DEFAULT_BUSINESS_HOURS.weekend.close] }], isOpen: true },
-    { day: 'SUN', times: [{ startTime: [DEFAULT_BUSINESS_HOURS.weekend.open], endTime: [DEFAULT_BUSINESS_HOURS.weekend.close] }], isOpen: true },
+    { day: 'MON', times: [], isOpen: false },
+    { day: 'TUE', times: [], isOpen: false },
+    { day: 'WED', times: [], isOpen: false },
+    { day: 'THU', times: [], isOpen: false },
+    { day: 'FRI', times: [], isOpen: false },
+    { day: 'SAT', times: [], isOpen: false },
+    { day: 'SUN', times: [], isOpen: false },
   ],
   businessDocuments: {
     hospitalityLicense: '',
@@ -85,10 +85,17 @@ const RestaurantApplicationContext = createContext<RestaurantApplicationContextT
 export function RestaurantApplicationProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToast();
   const [application, setApplication] = useState<RestaurantApplication | null>(() => {
-    // Try to load saved application data on mount
+    // Only load saved data if we're editing an existing application
+    const searchParams = new URLSearchParams(window.location.search);
+    const isEditing = searchParams.has('edit');
+
     try {
-      const savedData = localStorage.getItem('restaurantApplication');
-      return savedData ? JSON.parse(savedData) : defaultApplication;
+      if (isEditing) {
+        const savedData = localStorage.getItem('restaurantApplication');
+        return savedData ? JSON.parse(savedData) : defaultApplication;
+      }
+      // For new applications, start fresh
+      return defaultApplication;
     } catch (error) {
       console.error('Failed to load saved application:', error);
       return defaultApplication;
@@ -113,7 +120,11 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   // Listen for beforeunload event to save data before refresh
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (application) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const isEditing = searchParams.has('edit');
+      
+      // Only save data if we're editing or have made changes
+      if (application && (isEditing || JSON.stringify(application) !== JSON.stringify(defaultApplication))) {
         localStorage.setItem('restaurantApplication', JSON.stringify(application));
         sessionStorage.setItem('currentStep', currentStep.toString());
       }
@@ -124,42 +135,80 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   }, [application]);
 
   const updateApplication = (data: Partial<RestaurantApplication>) => {
-    console.log('Updating application with:', data);
     setApplication(prev => {
       if (!prev) return { ...defaultApplication, ...data };
       const currentApplication = prev || defaultApplication;
 
-      const updatedApplication = {
+      // Deep merge arrays and nested objects
+      const updatedApplication: RestaurantApplication = {
         ...currentApplication,
         ...data,
-        // Preserve arrays if not provided in update
-        beneficialOwners: data.beneficialOwners || currentApplication.beneficialOwners,
-        restaurantImages: data.restaurantImages || currentApplication.restaurantImages,
-        menuImages: data.menuImages || currentApplication.menuImages,
-        cuisines: data.cuisines || currentApplication.cuisines,
-        openingTimes: data.openingTimes || currentApplication.openingTimes
+        // Deep merge arrays
+        beneficialOwners: data.beneficialOwners 
+          ? [...data.beneficialOwners]
+          : [...currentApplication.beneficialOwners],
+        restaurantImages: data.restaurantImages 
+          ? [...data.restaurantImages]
+          : [...currentApplication.restaurantImages],
+        menuImages: data.menuImages 
+          ? [...data.menuImages]
+          : [...currentApplication.menuImages],
+        cuisines: data.cuisines 
+          ? [...data.cuisines]
+          : [...currentApplication.cuisines],
+        openingTimes: data.openingTimes 
+          ? [...data.openingTimes]
+          : [...currentApplication.openingTimes],
+        // Deep merge nested objects
+        restaurantContactInfo: {
+          ...currentApplication.restaurantContactInfo,
+          ...data.restaurantContactInfo
+        },
+        location: {
+          ...currentApplication.location,
+          ...data.location,
+          coordinates: {
+            ...currentApplication.location.coordinates,
+            ...data.location?.coordinates
+          }
+        },
+        businessDocuments: {
+          ...currentApplication.businessDocuments,
+          ...data.businessDocuments,
+          bankDetails: {
+            ...currentApplication.businessDocuments.bankDetails,
+            ...data.businessDocuments?.bankDetails
+          },
+          taxId: {
+            ...currentApplication.businessDocuments.taxId,
+            ...data.businessDocuments?.taxId
+          }
+        }
       };
-      console.log('Updated application state:', updatedApplication);
       return updatedApplication;
     });
   };
 
   // Auto-save to localStorage whenever application changes
   useEffect(() => {
-    if (application) {
+    const searchParams = new URLSearchParams(window.location.search);
+    const isEditing = searchParams.has('edit');
+    
+    // Debounce localStorage updates
+    const timeoutId = setTimeout(() => {
+      if (application && (isEditing || JSON.stringify(application) !== JSON.stringify(defaultApplication))) {
       localStorage.setItem('restaurantApplication', JSON.stringify(application));
-    }
-  }, [application]);
+      }
+    }, 500);
 
-  const resetApplication = () => {
-    // This function is now only used internally
-    // and should not be exposed to components
-  };
+    return () => clearTimeout(timeoutId);
+  }, [application]);
 
   const submitApplication = async (): Promise<RestaurantApplicationResponse> => {
     if (!application) {
       console.error('No application data to submit');
-      throw new Error('Please fill in all required information before submitting.');
+      showToast('Please fill in all required information before submitting.', 'error');
+      return;
     }
     
     // Check if this is a new application or resubmission
@@ -169,7 +218,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     if (isResubmission) {
       const applicationId = searchParams.get('edit');
       if (!applicationId) {
-        throw new Error('Invalid application ID for resubmission');
+        showToast('Invalid application ID for resubmission', 'error');
+        return;
       }
       // For resubmission, use the resubmitApplication function
       return resubmitApplication(applicationId, application);
@@ -178,7 +228,9 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     const token = localStorage.getItem('authToken');
     if (!token) {
       console.error('Authentication token not found');
-      throw new Error('Your session has expired. Please log in again.');
+      showToast('Your session has expired. Please log in again.', 'error');
+      window.location.href = '/login';
+      return;
     }
 
     // Validate required fields
@@ -205,7 +257,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
 
     console.log('Checking required fields:', missingFields);
     if (missingFields.length > 0) {
-      throw new Error(`Please complete all required fields: ${missingFields.join(', ')}`);
+      showToast(`Please complete all required fields: ${missingFields.join(', ')}`, 'error');
+      return;
     }
 
     console.log('Submitting application:', application);
@@ -348,7 +401,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         errorMessage += 'An unexpected error occurred.';
       }
       showToast(errorMessage, 'error');
-      throw new Error(errorMessage);
+      return null;
     }
   };
 
@@ -359,7 +412,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         currentStep,
         setCurrentStep,
         updateApplication,
-        resetApplication,
         submitApplication,
       }}
     >

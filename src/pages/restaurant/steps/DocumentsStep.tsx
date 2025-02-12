@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { FileText, AlertCircle } from 'lucide-react';
 import { RequiredLabel } from './RestaurantInfoStep';
+import { useToast } from '../../../context/ToastContext';
 
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
 import { useFormValidation } from '../../../hooks/useFormValidation';
@@ -29,6 +30,7 @@ interface BankDetails {
 
 export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,40 +109,6 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     bankIdentifierCode: '', // This is used as the tax document number
   });
 
-  const validateForm = useCallback(() => {
-    console.log('Validating form with documents:', documents);
-    
-    // Only validate required fields
-    const validationData = {
-      hospitalityLicense: documents.hospitalityLicense.length > 0,
-      registrationCertificate: documents.registrationCertificate.length > 0,
-      taxDocument: documents.taxDocument.length > 0,
-      idCards: documents.idCards.length > 0
-    };
-    
-    console.log('Validation data:', validationData);
-    
-    // Validate required fields
-    if (!validate(validationData)) {
-      const newErrors: string[] = [];
-      if (!validationData.hospitalityLicense) {
-        newErrors.push('Please upload a Hospitality License');
-      }
-      if (!validationData.registrationCertificate) {
-        newErrors.push('Please upload a Registration Certificate');
-      }
-      if (!validationData.taxDocument) {
-        newErrors.push('Please upload a Tax Document');
-      }
-      if (!validationData.idCards) {
-        newErrors.push('Please upload at least one ID Card');
-      }
-      setErrors(newErrors);
-      return false;
-    }
-    
-    return true;
-  }, [documents, validate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,23 +124,22 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     // Validate all required fields first
     const validationErrors = [];
     
-    if (!documents.hospitalityLicense?.length || !documents.hospitalityLicense[0]?.key) {
+    if (!documents.hospitalityLicense?.length) {
       validationErrors.push('Hospitality License is required');
     }
-    if (!documents.registrationCertificate?.length || !documents.registrationCertificate[0]?.key) {
+    if (!documents.registrationCertificate?.length) {
       validationErrors.push('Registration Certificate is required');
     }
-    if (!documents.taxDocument?.length || !documents.taxDocument[0]?.key) {
+    if (!documents.taxDocument?.length) {
       validationErrors.push('Tax Document is required');
     }
     if (!documents.idCards?.length || documents.idCards.length < 2) {
       validationErrors.push('Please upload both front and back sides of your ID card');
-    } else if (documents.idCards.length > 2) {
-      validationErrors.push('Only front and back sides of ID card are required');
     }
-    
+
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
+      setIsSubmitting(false);
       return;
     }
 
@@ -244,7 +211,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       
       let response;
       if (isResubmission) {
-        if (!applicationId.trim()) {
+        if (!applicationId?.trim()) {
           throw new Error('Invalid application ID for resubmission');
         }
         response = await resubmitApplication(applicationId, applicationData);
@@ -254,14 +221,21 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
         console.log('New application submitted successfully:', response);
       }
 
+      if (!response) {
+        throw new Error('Failed to submit application. Please try again.');
+      }
+
       setShowSuccess(true);
+      clearApplicationData(); // Clear data after successful submission
 
     } catch (error) {
       console.error('Submission failed:', error);
       if (error instanceof Error) {
+        showToast(error.message, 'error');
         setErrors([error.message]);
       } else {
-        setErrors(['Failed to submit application. Please try again.']);
+        showToast('Failed to submit application. Please try again.', 'error');
+        setErrors(['An unexpected error occurred. Please try again.']);
       }
     } finally {
       setIsSubmitting(false);
@@ -269,12 +243,77 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   };
 
   const handleGoHome = () => {
-    // Clear all application-related storage
-    window.localStorage.removeItem('restaurantApplication');
-    window.localStorage.removeItem('restaurantDocuments');
-    window.sessionStorage.removeItem('currentStep');
-    window.localStorage.removeItem('cachedCuisines');
+    // Clear all application-related data
+    clearApplicationData();
     navigate('/dashboard');
+  };
+
+  // Function to clear all application data
+  const clearApplicationData = () => {
+    // Clear localStorage
+    localStorage.removeItem('restaurantApplication');
+    localStorage.removeItem('restaurantDocuments');
+    localStorage.removeItem('cachedCuisines');
+    
+    // Clear sessionStorage
+    sessionStorage.removeItem('currentStep');
+    
+    // Reset form state
+    setDocuments({
+      hospitalityLicense: [],
+      registrationCertificate: [],
+      bankDocument: [],
+      taxDocument: [],
+      idCards: [],
+    });
+    
+    setBankDetails({
+      bankName: '',
+      accountHolderName: '',
+      accountNumber: '',
+      branchName: '',
+      bankIdentifierCode: '',
+    });
+    
+    // Reset application context
+    updateApplication({
+      beneficialOwners: [],
+      companyName: '',
+      restaurantName: '',
+      restaurantContactInfo: {
+        email: '',
+        phone: '',
+        countryCode: 'DE',
+      },
+      location: {
+        coordinates: {
+          type: 'Point',
+          coordinates: [0, 0],
+        },
+        address: '',
+      },
+      restaurantImages: [],
+      menuImages: [],
+      profileImage: '',
+      cuisines: [],
+      openingTimes: [],
+      businessDocuments: {
+        hospitalityLicense: '',
+        registrationCertificate: '',
+        bankDetails: {
+          accountNumber: '',
+          bankName: '',
+          branchName: '',
+          bankIdentifierCode: '',
+          accountHolderName: '',
+          documentUrl: '',
+        },
+        taxId: {
+          documentNumber: '',
+          documentUrl: '',
+        }
+      },
+    });
   };
 
   // Save documents to localStorage whenever they change

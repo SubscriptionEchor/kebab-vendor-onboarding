@@ -53,6 +53,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   const [outOfBounds, setOutOfBounds] = useState(false);
   const map = useMap();
   const provider = new OpenStreetMapProvider();
+  const { showToast } = useToast();
 
   // Add Berlin boundary rectangle
   useEffect(() => {
@@ -79,7 +80,14 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
     setOutOfBounds(false);
     
     try {
-      const results = await provider.search({ query: `${searchQuery}, Berlin` });
+      // Force search within Berlin
+      const results = await provider.search({ 
+        query: `${searchQuery}, Berlin, Germany`,
+        bounds: [
+          [BERLIN_BOUNDS.south, BERLIN_BOUNDS.west],
+          [BERLIN_BOUNDS.north, BERLIN_BOUNDS.east]
+        ]
+      });
       setResults(results);
     } finally {
       setIsSearching(false);
@@ -96,6 +104,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   const handleSelect = (result: any) => {
     if (!isLocationInBerlin(result.y, result.x)) {
       setOutOfBounds(true);
+      showToast('Currently we only operate in Berlin. Please select a location within Berlin city limits.', 'error');
       return;
     }
     
@@ -114,6 +123,12 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   return (
     <div className="absolute top-3 left-0 right-0 z-[1000] mx-3">
       <div className="relative">
+        <div className="bg-brand-accent/10 rounded-lg p-3 mb-3">
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <p>Currently we only operate in Berlin. Please select a location within the highlighted area.</p>
+          </div>
+        </div>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <input
@@ -188,6 +203,7 @@ import {
   validatePassportId,
   validateGermanPostalCode 
 } from '../../../utils/validation';
+import { useToast } from '../../../context/ToastContext';
 
 interface RestaurantInfoStepProps {
   onNext: () => void;
@@ -230,13 +246,13 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const [formData, setFormData] = useState({
     // Company Details
     companyName: '',
-    
+
     // Restaurant Details
     restaurantName: '',
     restaurantEmail: '',
     restaurantPhone: '',
     restaurantCountryCode: 'DE',
-    
+
     // Location
     address: {
       street: '',
@@ -249,7 +265,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       lat: DEFAULT_LOCATION.lat,
       lng: DEFAULT_LOCATION.lng,
     },
-    
+
     // Owner Details
     ownerName: '',
     passportId: '',
@@ -276,7 +292,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
 
   const addOwner = () => {
     if (additionalOwners.length >= 6) return; // Maximum 7 owners (primary + 6 additional)
-    
+
     setAdditionalOwners([
       ...additionalOwners,
       {
@@ -394,7 +410,20 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    setValidationErrors([]);
     const validationErrors = [];
+
+    const isLocationInBerlin = (lat: number, lng: number) => {
+      return lat >= BERLIN_BOUNDS.south && 
+             lat <= BERLIN_BOUNDS.north && 
+             lng >= BERLIN_BOUNDS.west && 
+             lng <= BERLIN_BOUNDS.east;
+    };
+
+    // Validate location is within Berlin
+    if (!isLocationInBerlin(formData.location.lat, formData.location.lng)) {
+      validationErrors.push('Please select a location within Berlin city limits');
+    }
 
     // Validate required fields
     if (!formData.companyName.trim()) {
@@ -477,6 +506,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     if (validationErrors.length > 0) {
       console.log('Validation errors:', validationErrors);
       setValidationErrors(validationErrors);
+      showToast('Please fix the validation errors before continuing.', 'error');
       return;
     }
 
@@ -485,7 +515,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       const formattedAddress = [
         `${formData.address.street} ${formData.address.number}`.trim(),
         `${formData.address.postalCode} ${formData.address.city}`.trim(),
-        'Berlin',
+        formData.address.city,
         formData.address.country
       ].filter(Boolean).join(', ');
 
@@ -496,12 +526,12 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         return `+${prefix}${digits}`;
       };
 
-      // Format phone numbers for additional owners
+      // Format phone numbers for additional owners safely
       const formattedAdditionalOwners = additionalOwners.map(owner => ({
         name: `${owner.firstName} ${owner.lastName}`,
         passportId: owner.passportId,
         email: owner.email,
-        phone: formatPhoneNumber(owner.phone, owner.countryCode),
+        phone: owner.phone ? formatPhoneNumber(owner.phone, owner.countryCode) : '',
         isPrimary: false,
         idCardDocuments: [],
       }));
@@ -510,10 +540,10 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       await updateApplication({
         companyName: formData.companyName,
         restaurantName: formData.restaurantName,
-        // Format restaurant contact info
+        // Format restaurant contact info safely
         restaurantContactInfo: {
           email: formData.restaurantEmail.trim(),
-          phone: formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode),
+          phone: formData.restaurantPhone ? formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode) : '',
           countryCode: formData.restaurantCountryCode === 'DE' ? '49' : '91',
         },
         location: {
@@ -543,6 +573,8 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       onNext();
     } catch (error) {
       console.error('Form submission error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      showToast(errorMessage, 'error');
       if (error instanceof Error) {
         setValidationErrors(prev => [...prev, error.message]);
       } else {
@@ -551,19 +583,6 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     }
   };
 
-  const languages = [
-    { value: 'English', label: 'English' },
-    { value: 'German', label: 'German' },
-    { value: 'French', label: 'French' },
-    { value: 'Italian', label: 'Italian' },
-    { value: 'Spanish', label: 'Spanish' },
-  ];
-
-  const currencies = [
-    { value: 'EUR', label: 'EUR (€)' },
-    { value: 'USD', label: 'USD ($)' },
-    { value: 'GBP', label: 'GBP (£)' },
-  ];
   return (
     <motion.form
       initial={{ opacity: 0 }}
@@ -838,7 +857,6 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
           </div>
         </div>
       </div>
-
       {/* Location Section */}
       <div className="space-y-6">
         <h2 className="text-xl font-semibold text-gray-900">Restaurant Location</h2>

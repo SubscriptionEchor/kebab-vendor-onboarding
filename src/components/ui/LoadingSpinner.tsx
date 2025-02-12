@@ -14,12 +14,13 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
 
   return (
     <motion.div
-      className={`${sizes[size]} border-brand-primary border-t-transparent rounded-full ${className}`}
+      className={`${sizes[size]} border-brand-primary border-t-transparent rounded-full animate-shimmer ${className}`}
       animate={{ rotate: 360 }}
       transition={{
         duration: 1,
         repeat: Infinity,
-        ease: "linear"
+        ease: "linear",
+        repeatType: "loop"
       }}
     />
   );

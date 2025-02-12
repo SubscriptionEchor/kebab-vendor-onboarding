@@ -14,8 +14,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { getApplications } from '../services/restaurant';
 import { useToast } from '../context/ToastContext';
-import { VirtualizedList } from '../components/ui/VirtualizedList';
 import { OptimizedImage } from '../components/ui/OptimizedImage';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 interface Application {
   id: string;
@@ -230,33 +230,21 @@ export function ApplicationsPage() {
         )}
 
         {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2].map((index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl shadow-sm overflow-hidden animate-pulse"
-              >
-                <div className="p-6 space-y-4">
-                  <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-col items-center justify-center py-12">
+            <LoadingSpinner size="lg" className="mb-4" />
+            <p className="text-gray-600">Loading applications...</p>
           </div>
         ) : filteredApplications.length > 0 ? (
-          <VirtualizedList
-            items={filteredApplications}
-            itemHeight={280}
-            containerHeight={600}
-            className="space-y-4 overflow-auto"
-            renderItem={(application, index) => {
-              const { icon: StatusIcon, color } = getStatusIcon(application.status);
-              return (
+          <div className="space-y-4">
+            <AnimatePresence>
+              {filteredApplications.map((application, index) => {
+                const { icon: StatusIcon, color } = getStatusIcon(application.status);
+                return (
                 <motion.div
-                  key={application.id}
+                  key={`application-${application.id}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: index * 0.1 }}
                   className="bg-white rounded-xl shadow-sm overflow-hidden"
                 >
@@ -323,9 +311,10 @@ export function ApplicationsPage() {
 
                   </div>
                 </motion.div>
-              );
-            }}
-          />
+                );
+              })}
+            </AnimatePresence>
+          </div>
         ) : (
           <div className="text-center py-12 bg-white rounded-lg shadow-sm">
             <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />

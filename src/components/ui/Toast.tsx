@@ -38,16 +38,16 @@ export function Toast({ message, type, isVisible, onClose }: ToastProps) {
       {isVisible && (
         <motion.div
           initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={{ opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 25 } }}
           exit={{ opacity: 0, y: 50 }}
           className="fixed bottom-4 right-4 z-50"
         >
-          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg border ${colors[type]}`}>
+          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg border shadow-lg backdrop-blur-sm ${colors[type]}`}>
             <Icon className="w-5 h-5" />
             <p className="text-sm font-medium">{message}</p>
             <button
               onClick={onClose}
-              className="ml-2 hover:opacity-70"
+              className="ml-2 hover:opacity-70 transition-opacity"
             >
               <X className="w-4 h-4" />
             </button>

@@ -16,11 +16,16 @@ export default {
       },
       keyframes: {
         shimmer: {
-          '100%': { transform: 'translateX(100%)' },
+          '0%': {
+            backgroundPosition: '-1000px 0',
+          },
+          '100%': {
+            backgroundPosition: '1000px 0',
+          },
         },
       },
       animation: {
-        shimmer: 'shimmer 2s infinite',
+        shimmer: 'shimmer 2s linear infinite',
       },
     },
   },

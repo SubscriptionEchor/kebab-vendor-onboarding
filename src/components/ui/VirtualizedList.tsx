@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualList } from '../../hooks/useVirtualList';
 
 interface VirtualizedListProps<T> {
@@ -32,14 +33,23 @@ function VirtualizedListComponent<T>({
     <div
       {...virtualProps}
       ref={containerRef}
-      className={className}
+      className={`${className} relative overflow-hidden`}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
-        {visibleItems.map(({ item, index }) => (
-          <div key={index} {...itemProps(index)}>
-            {renderItem(item, index)}
-          </div>
-        ))}
+        <AnimatePresence>
+          {visibleItems.map(({ item, index }) => (
+            <motion.div
+              key={index}
+              {...itemProps(index)}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {renderItem(item, index)}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );
