@@ -32,22 +32,99 @@ export function RestaurantRegistrationPage() {
         setIsLoading(true);
         try {
           const applicationData = await getApplicationById(editId);
+          console.log('Loaded application data:', applicationData);
+          
+          // Format opening times
+          const formattedOpeningTimes = applicationData.openingTimes?.map(time => ({
+            day: time.day,
+            isOpen: time.isOpen,
+            times: time.isOpen && time.times?.length > 0 ? [{
+              startTime: Array.isArray(time.times[0].startTime) ? 
+                time.times[0].startTime[0] : time.times[0].startTime,
+              endTime: Array.isArray(time.times[0].endTime) ? 
+                time.times[0].endTime[0] : time.times[0].endTime
+            }] : []
+          }));
+
+          // Extract address components from the backend format
+          let addressComponents = {
+            street: '',
+            number: '',
+            city: 'Berlin',
+            postalCode: '',
+            country: 'Germany'
+          };
+
+          if (applicationData.location?.address) {
+            const addressParts = applicationData.location.address.split(',').map(part => part.trim());
+            
+            if (addressParts[0]) {
+              const streetMatch = addressParts[0].match(/^(.*?)\s+(\d+\s*[A-Za-z]?)?$/);
+              if (streetMatch) {
+                addressComponents.street = streetMatch[1]?.trim() || '';
+                addressComponents.number = streetMatch[2]?.trim() || '';
+              } else {
+                addressComponents.street = addressParts[0];
+              }
+            }
+
+            if (addressParts[1]) {
+              const cityParts = addressParts[1].match(/(\d+)\s+(.+)/);
+              if (cityParts) {
+                addressComponents.postalCode = cityParts[1];
+                addressComponents.city = cityParts[2];
+              } else {
+                addressComponents.city = addressParts[1];
+              }
+            }
+
+            if (addressParts[3]) {
+              addressComponents.country = addressParts[3];
+            }
+          }
+          
+          // Handle phone numbers - strip country code if present
+          const stripCountryCode = (phone: string) => {
+            if (!phone) return '';
+            return phone.replace(/^\+\d{2}/, '');
+          };
+
+          // Get coordinates, ensuring they're numbers
+          const coordinates = applicationData.location?.coordinates?.coordinates || [13.404954, 52.520008];
+          const [lng, lat] = coordinates.map(coord => typeof coord === 'number' ? coord : parseFloat(coord));
           
           // Format the data to match our application structure
           const formattedData = {
-            beneficialOwners: applicationData.beneficialOwners,
+            beneficialOwners: applicationData.beneficialOwners.map(owner => ({
+              ...owner,
+              phone: stripCountryCode(owner.phone),
+              idCardDocuments: owner.idCardDocuments || []
+            })),
             companyName: applicationData.companyName,
             restaurantName: applicationData.restaurantName,
-            restaurantContactInfo: applicationData.restaurantContactInfo,
-            location: applicationData.location,
+            restaurantContactInfo: {
+              ...applicationData.restaurantContactInfo,
+              phone: stripCountryCode(applicationData.restaurantContactInfo.phone)
+            },
+            location: {
+              coordinates: {
+                type: 'Point',
+                coordinates: [
+                  lng,
+                  lat
+                ]
+              },
+              address: addressComponents
+            },
             restaurantImages: applicationData.restaurantImages,
             menuImages: applicationData.menuImages,
             profileImage: applicationData.profileImage,
             cuisines: applicationData.cuisines,
-            openingTimes: applicationData.openingTimes,
+            openingTimes: formattedOpeningTimes,
             businessDocuments: applicationData.businessDocuments,
           };
 
+          console.log('Formatted application data:', formattedData);
           updateApplication(formattedData);
           showToast('Application loaded successfully', 'success');
         } catch (error) {

@@ -39,7 +39,12 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   // Initialize documents state from application
   useEffect(() => {
     if (application?.businessDocuments) {
+      console.log('Initializing documents from application:', application);
       const { businessDocuments } = application;
+      const primaryOwner = application.beneficialOwners?.find(owner => owner.isPrimary);
+      
+      console.log('Primary owner:', primaryOwner);
+      console.log('ID card documents:', primaryOwner?.idCardDocuments);
       
       setDocuments({
         hospitalityLicense: businessDocuments.hospitalityLicense ? [{
@@ -58,12 +63,13 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           key: businessDocuments.taxId.documentUrl,
           previewUrl: businessDocuments.taxId.documentUrl
         }] : [],
-        idCards: application.beneficialOwners?.[0]?.idCardDocuments?.map(doc => ({
+        idCards: primaryOwner?.idCardDocuments?.map(doc => ({
           key: doc,
           previewUrl: doc
         })) || []
       });
 
+      console.log('Initialized documents state:', documents);
       // Initialize bank details
       const { bankDetails: existingBankDetails } = businessDocuments;
       if (existingBankDetails) {
@@ -142,25 +148,24 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     setErrors([]);
     setIsSubmitting(true);
     
+    console.log('Starting form submission with documents:', documents);
+    
     const searchParams = new URLSearchParams(location.search);
     const applicationId = searchParams.get('edit');
-    
-    console.log('Current documents state:', documents);
-    console.log('ID Cards available:', documents.idCards);
     
     // Validate all required fields first
     const validationErrors = [];
     
-    if (!documents.hospitalityLicense[0]?.key) {
+    if (!documents.hospitalityLicense?.length || !documents.hospitalityLicense[0]?.key) {
       validationErrors.push('Hospitality License is required');
     }
-    if (!documents.registrationCertificate[0]?.key) {
+    if (!documents.registrationCertificate?.length || !documents.registrationCertificate[0]?.key) {
       validationErrors.push('Registration Certificate is required');
     }
-    if (!documents.taxDocument[0]?.key) {
+    if (!documents.taxDocument?.length || !documents.taxDocument[0]?.key) {
       validationErrors.push('Tax Document is required');
     }
-    if (documents.idCards.length < 2) {
+    if (!documents.idCards?.length || documents.idCards.length < 2) {
       validationErrors.push('Please upload both front and back sides of your ID card');
     } else if (documents.idCards.length > 2) {
       validationErrors.push('Only front and back sides of ID card are required');
@@ -182,11 +187,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       // Prepare application data with proper formatting
       const applicationData = {
         beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-          name: owner.name,
-          passportId: owner.passportId,
-          email: owner.email,
-          phone: owner.phone,
-          isPrimary: owner.isPrimary,
+          ...owner,
           idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : []
         })),
         // Ensure location and coordinates are included

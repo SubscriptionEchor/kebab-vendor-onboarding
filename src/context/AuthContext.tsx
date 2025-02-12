@@ -19,6 +19,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchCuisines = async (token: string) => {
     console.log('Starting cuisine fetch with token:', token);
+    if (!token) {
+      console.error('No auth token available');
+      setCuisines(getDefaultCuisines());
+      return;
+    }
+
+    setIsLoading(true);
 
     // Try to load from cache first
     const cachedCuisines = localStorage.getItem('cachedCuisines');
@@ -26,7 +33,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const parsed = JSON.parse(cachedCuisines);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log('Using cached cuisines:', parsed);
           setCuisines(parsed);
+          setIsLoading(false);
           return;
         }
       } catch (error) {
@@ -38,47 +47,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await getCuisines();
       console.log('Raw cuisine response:', response);
+      
       if (response?.vendorOnboardingBootstrap?.cuisines) {
-        const uniqueCuisines = Array.from(
-          new Set(response.vendorOnboardingBootstrap.cuisines.map(c => c.name))
-        ).map(name => ({ name }));
+        const cuisineData = response.vendorOnboardingBootstrap.cuisines;
+        console.log('Received cuisine data:', cuisineData);
         
-        // Only update if we got valid data
-        if (uniqueCuisines.length > 0) {
-          console.log('Setting cuisines:', uniqueCuisines);
-          setCuisines(uniqueCuisines);
-          localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
-          return;
-        }
+        const uniqueCuisines = [...new Set(cuisineData.map(c => c.name))]
+          .map(name => ({ name: name.trim() }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log('Setting cuisines:', uniqueCuisines);
+        setCuisines(uniqueCuisines);
+        localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
+        console.log('Saved cuisines to cache:', uniqueCuisines);
+        return;
       }
+      
       throw new Error('No cuisine data received from API');
     } catch (error) {
-      // Provide default cuisines if fetch fails
-      const defaultCuisines = [
-        { name: 'Turkish' },
-        { name: 'Indian' },
-        { name: 'Italian' },
-        { name: 'German' },
-        { name: 'Mediterranean' },
-        { name: 'Asian' },
-        { name: 'Middle Eastern' },
-        { name: 'International' }
-      ];
-      
       console.warn('Failed to fetch cuisines, using defaults:', error);
-      setCuisines(defaultCuisines);
+      setCuisines(getDefaultCuisines());
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const getDefaultCuisines = () => [
+    { name: 'Turkish' },
+    { name: 'Indian' },
+    { name: 'Italian' },
+    { name: 'German' },
+    { name: 'Mediterranean' },
+    { name: 'Asian' },
+    { name: 'Middle Eastern' },
+    { name: 'International' }
+  ];
 
   // Fetch cuisines when auth token changes
   useEffect(() => {
     if (authToken) {
-      if (cuisines.length === 0) {
-        console.log('No cuisines loaded, fetching from API');
-        fetchCuisines(authToken);
-      }
+      fetchCuisines(authToken);
     }
-  }, [authToken, cuisines.length]);
+  }, [authToken]);
 
   const login = async (phone: string, countryCode: string) => {
     setIsLoading(true);

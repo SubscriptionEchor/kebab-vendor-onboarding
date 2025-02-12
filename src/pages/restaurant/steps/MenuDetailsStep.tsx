@@ -131,15 +131,22 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   // Initialize selected cuisines from application state
   useEffect(() => {
     if (application?.cuisines && cuisines.length > 0) {
-      // Format existing cuisines to match new structure
-      const validCuisines = application.cuisines.map(cuisine => 
-        typeof cuisine === 'string' ? cuisine : cuisine.name
-      ).filter(cuisineName =>
-        cuisines.some(c => c.name.toLowerCase() === cuisineName.toLowerCase())
-      );
-      setSelectedCuisines(validCuisines);
+      console.log('Initializing cuisines from application:', application.cuisines);
+      console.log('Available cuisines:', cuisines);
+
+      const normalizedCuisines = application.cuisines
+        .map(cuisine => {
+          const name = typeof cuisine === 'string' ? cuisine : cuisine.name;
+          return name.trim();
+        })
+        .filter(name => 
+          cuisines.some(c => c.name.toLowerCase() === name.toLowerCase())
+        );
+
+      console.log('Normalized cuisines:', normalizedCuisines);
+      setSelectedCuisines(normalizedCuisines);
     }
-  }, [application, cuisines]);
+  }, [application, cuisines.length]);
   const { errors, validate, clearErrors } = useFormValidation({
     profileImage: validateImage,
     restaurantImages: (images) => images.length >= 2 && images.length <= 4,
@@ -196,14 +203,22 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const handleCuisineToggle = (cuisineId: string) => {
     setSelectedCuisines((prev) => {
       const cuisineName = cuisines.find(c => c.id === cuisineId)?.name;
-      if (!cuisineName) return prev;
+      if (!cuisineName) {
+        console.log('Cuisine not found for ID:', cuisineId);
+        return prev;
+      }
+
+      console.log('Toggling cuisine:', cuisineName);
   
       if (prev.includes(cuisineName)) {
+        console.log('Removing cuisine:', cuisineName);
         return prev.filter(name => name !== cuisineName);
       }
       if (prev.length >= 3) {
+        console.log('Maximum cuisines selected');
         return prev;
       }
+      console.log('Adding cuisine:', cuisineName);
       return [...prev, cuisineName];
     });
   };
@@ -384,15 +399,18 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         {isLoadingCuisines && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((_, index) => (
-              <div
+              <motion.div
                 key={index}
-                className="h-24 rounded-lg bg-gray-100 animate-pulse"
+                className="h-24 rounded-lg bg-gray-100"
+                initial={{ opacity: 0.5 }}
+                animate={{ opacity: 1 }}
+                transition={{ repeat: Infinity, duration: 1 }}
               />
             ))}
           </div>
         )}
 
-        {!isLoadingCuisines && (
+        {!isLoadingCuisines && cuisines.length > 0 && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredCuisines.map((cuisine) => (
@@ -417,12 +435,19 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
               ))}
             </div>
 
-            {filteredCuisines.length === 0 && (
+            {filteredCuisines.length === 0 && cuisineSearch && (
               <div className="text-center py-8 text-gray-500">
                 No cuisines found matching your search
               </div>
             )}
           </>
+        )}
+        
+        {!isLoadingCuisines && cuisines.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+            <p>Failed to load cuisines. Please try refreshing the page.</p>
+          </div>
         )}
       </div>
 

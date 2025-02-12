@@ -193,6 +193,30 @@ export function RequiredLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function parseAddress(address: string) {
+  const parts = address.split(',').map(part => part.trim());
+  const streetPart = parts[0] || '';
+  const cityPart = parts[1] || '';
+  
+  // Extract street name and number
+  const streetMatch = streetPart.match(/^(.*?)\s*(\d+\s*[A-Za-z]?)?$/);
+  const street = streetMatch ? streetMatch[1]?.trim() : streetPart;
+  const number = streetMatch ? streetMatch[2]?.trim() : '';
+  
+  // Extract postal code and city
+  const cityMatch = cityPart.match(/^(\d{5})\s*(.+)$/);
+  const postalCode = cityMatch ? cityMatch[1] : '';
+  const city = cityMatch ? cityMatch[2] : cityPart || 'Berlin';
+  
+  return {
+    street,
+    number,
+    city,
+    postalCode,
+    country: 'Germany'
+  };
+}
+
 export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const [formData, setFormData] = useState({
     // Company Details
@@ -277,17 +301,50 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   // Initialize form data from application context
   useEffect(() => {
     if (application) {
+      // Handle address parsing safely
+      let addressComponents = {
+        street: '',
+        number: '',
+        city: 'Berlin',
+        postalCode: '',
+        country: 'Germany'
+      };
+
+      if (typeof application.location?.address === 'string') {
+        const addressParts = application.location.address.split(',').map(part => part.trim());
+        const [streetWithNumber = '', city = '', state = '', country = '', postalCode = ''] = addressParts;
+
+        // Split street and number if present
+        const streetMatch = streetWithNumber.match(/^(.*?)\s*(\d+\s*[A-Za-z]?)?$/);
+        if (streetMatch) {
+          const [, street = '', number = ''] = streetMatch;
+          addressComponents.street = street.trim();
+          addressComponents.number = number.trim();
+        } else {
+          addressComponents.street = streetWithNumber;
+        }
+
+        addressComponents.city = city || 'Berlin';
+        addressComponents.postalCode = postalCode || '';
+        addressComponents.country = country || 'Germany';
+      } else if (typeof application.location?.address === 'object') {
+        // If address is already an object, use its components
+        addressComponents = {
+          street: application.location.address.street || '',
+          number: application.location.address.number || '',
+          city: application.location.address.city || 'Berlin',
+          postalCode: application.location.address.postalCode || '',
+          country: application.location.address.country || 'Germany'
+        };
+      }
+
       setFormData(prev => ({
         ...prev,
         companyName: application.companyName || '',
         restaurantName: application.restaurantName || '',
         restaurantEmail: application.restaurantContactInfo?.email || '',
         restaurantPhone: application.restaurantContactInfo?.phone || '',
-        address: {
-          ...prev.address,
-          street: application.location?.address?.split(',')[0] || '',
-          city: application.location?.address?.split(',')[1]?.trim() || '',
-        },
+        address: addressComponents,
         location: {
           lat: application.location?.coordinates?.coordinates[1] || 52.520008,
           lng: application.location?.coordinates?.coordinates[0] || 13.404954,
@@ -330,21 +387,17 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-    
-    // Ensure coordinates are properly formatted as numbers
-    const coordinates = {
-      lng: typeof formData.location.lng === 'string' ? 
-        parseFloat(formData.location.lng) : formData.location.lng,
-      lat: typeof formData.location.lat === 'string' ? 
-        parseFloat(formData.location.lat) : formData.location.lat
-    };
 
-    // Format address into a single string
+    // Format address according to backend expectations:
+    // "Street Number, Postal Code City, State, Country"
     const formattedAddress = [
-      formData.address.street,
-      formData.address.number,
-      formData.address.postalCode,
-      formData.address.city,
+      // Street and number
+      `${formData.address.street} ${formData.address.number}`.trim(),
+      // Postal code and city
+      `${formData.address.postalCode} ${formData.address.city}`.trim(),
+      // State (Berlin)
+      'Berlin',
+      // Country
       formData.address.country
     ].filter(Boolean).join(', ');
 
@@ -406,9 +459,10 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         location: {
           coordinates: {
             type: 'Point' as const,
-            coordinates: [coordinates.lng, coordinates.lat].map(coord => 
-              parseFloat(coord.toFixed(6))
-            )
+            coordinates: [
+              parseFloat(formData.location.lng.toFixed(6)),
+              parseFloat(formData.location.lat.toFixed(6))
+            ]
           },
           address: formattedAddress.trim(),
         },
@@ -783,92 +837,3 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
             Please select a location within Berlin city limits (highlighted area)
           </p>
           <div className="relative h-[400px] rounded-xl overflow-hidden shadow-lg">
-            <MapContainer
-              center={[BERLIN_CENTER.lat, BERLIN_CENTER.lng]}
-              zoom={13}
-              className="h-full w-full [&_.leaflet-control-attribution]:bg-white/70 [&_.leaflet-control-attribution]:backdrop-blur-sm"
-              zoomControl={false}
-              maxBounds={[
-                [BERLIN_BOUNDS.north, BERLIN_BOUNDS.west],
-                [BERLIN_BOUNDS.south, BERLIN_BOUNDS.east]
-              ]}
-              maxBoundsViscosity={1.0}
-            >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='<a href="https://www.openstreetmap.org/copyright" class="text-gray-600 hover:text-gray-900">OpenStreetMap</a>'
-              />
-              <SearchControl
-                onLocationSelect={(location) => {
-                  setFormData({
-                    ...formData,
-                    location: {
-                      lat: parseFloat(location.lat.toFixed(6)),
-                      lng: parseFloat(location.lng.toFixed(6))
-                    },
-                    address: {
-                      ...formData.address,
-                      ...(location.address ? { 
-                        street: location.address.split(',')[0]?.trim() || '',
-                        city: location.address.split(',')[1]?.trim() || formData.address.city,
-                        country: 'Germany'
-                      } : {})
-                    }
-                  });
-                }}
-              />
-              <Marker
-                position={[formData.location.lat, formData.location.lng]}
-                draggable={true}
-                eventHandlers={{
-                  dragend: (e) => {
-                    const marker = e.target;
-                    const position = marker.getLatLng();
-                    // Round coordinates to 6 decimal places
-                    setFormData({
-                      ...formData,
-                      location: {
-                        lat: parseFloat(position.lat.toFixed(6)),
-                        lng: parseFloat(position.lng.toFixed(6))
-                      }
-                    });
-                  },
-                }}
-              />
-            </MapContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Terms Confirmation */}
-      <div className="space-y-4">
-        <label className="flex items-start gap-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            className="mt-1 rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
-            required
-          />
-          <span>
-            I confirm that I am authorized to sign this document on behalf of the
-            company and accept the terms of this document
-          </span>
-        </label>
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex justify-between pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          onClick={() => window.history.back()}
-        >
-          Go back
-        </Button>
-        <Button type="submit" size="lg">
-          Save & continue
-        </Button>
-      </div>
-    </motion.form>
-  );
-}

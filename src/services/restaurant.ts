@@ -264,27 +264,46 @@ export async function resubmitApplication(applicationId: string, input: any) {
     throw new Error('Authentication required');
   }
 
+  // Format opening times correctly
+  if (input.openingTimes) {
+    input.openingTimes = input.openingTimes.map(time => ({
+      day: time.day,
+      isOpen: time.isOpen,
+      times: time.isOpen ? [{
+        startTime: Array.isArray(time.times[0].startTime) ? time.times[0].startTime : [time.times[0].startTime],
+        endTime: Array.isArray(time.times[0].endTime) ? time.times[0].endTime : [time.times[0].endTime]
+      }] : []
+    }));
+  }
+
   // Ensure coordinates are properly formatted
   if (input.location?.coordinates?.coordinates) {
+    // Preserve the original coordinates without modification
+    const [lng, lat] = input.location.coordinates.coordinates;
+
     input.location.coordinates = {
       type: 'Point',
-      coordinates: [
-        parseFloat(Number(input.location.coordinates.coordinates[0]).toFixed(6)),
-        parseFloat(Number(input.location.coordinates.coordinates[1]).toFixed(6))
-      ]
+      coordinates: [lng, lat]
     };
+    console.log('Formatted coordinates:', input.location.coordinates);
   }
 
   // Format all document URLs to ensure they're strings
   if (input.businessDocuments) {
     input.businessDocuments = {
-      ...input.businessDocuments,
       hospitalityLicense: getDocumentKey(input.businessDocuments.hospitalityLicense),
       registrationCertificate: getDocumentKey(input.businessDocuments.registrationCertificate),
       taxId: {
-        ...input.businessDocuments.taxId,
         documentNumber: input.businessDocuments.taxId?.documentNumber || 'default',
         documentUrl: getDocumentKey(input.businessDocuments.taxId?.documentUrl)
+      },
+      bankDetails: {
+        accountNumber: input.businessDocuments.bankDetails?.accountNumber || '',
+        bankName: input.businessDocuments.bankDetails?.bankName || '',
+        branchName: input.businessDocuments.bankDetails?.branchName || '',
+        bankIdentifierCode: input.businessDocuments.bankDetails?.bankIdentifierCode || '',
+        accountHolderName: input.businessDocuments.bankDetails?.accountHolderName || '',
+        documentUrl: getDocumentKey(input.businessDocuments.bankDetails?.documentUrl) || ''
       }
     };
   }
@@ -300,34 +319,43 @@ export async function resubmitApplication(applicationId: string, input: any) {
   // Format all image arrays to ensure they contain only string keys
   if (input.restaurantImages) {
     input.restaurantImages = input.restaurantImages
-      .map(img => getDocumentKey(img))
+      .map(img => typeof img === 'string' ? img : img.key)
       .filter(Boolean);
   }
 
   if (input.menuImages) {
     input.menuImages = input.menuImages
-      .map(img => getDocumentKey(img))
+      .map(img => typeof img === 'string' ? img : img.key)
       .filter(Boolean);
   }
 
   if (input.profileImage) {
-    input.profileImage = getDocumentKey(input.profileImage);
+    input.profileImage = typeof input.profileImage === 'string' ? 
+      input.profileImage : 
+      input.profileImage?.key || '';
   }
 
   // Format phone numbers
   if (input.restaurantContactInfo?.phone) {
-    input.restaurantContactInfo.phone = formatPhoneNumber(
-      input.restaurantContactInfo.phone,
-      input.restaurantContactInfo.countryCode || 'DE'
-    );
+    // Only format if not already formatted
+    if (!input.restaurantContactInfo.phone.startsWith('+')) {
+      input.restaurantContactInfo.phone = formatPhoneNumber(
+        input.restaurantContactInfo.phone,
+        input.restaurantContactInfo.countryCode || 'DE'
+      );
+    }
   }
 
   if (input.beneficialOwners) {
     input.beneficialOwners = input.beneficialOwners.map(owner => ({
-      ...owner,
-      phone: formatPhoneNumber(owner.phone, owner.countryCode || 'DE'),
+      name: owner.name,
+      passportId: owner.passportId,
+      email: owner.email,
+      // Only format if not already formatted
+      phone: owner.phone.startsWith('+') ? owner.phone : formatPhoneNumber(owner.phone, owner.countryCode || 'DE'),
+      isPrimary: owner.isPrimary,
       idCardDocuments: (owner.idCardDocuments || [])
-        .map(doc => getDocumentKey(doc))
+        .map(doc => typeof doc === 'string' ? doc : doc.key)
         .filter(Boolean)
     }));
   }
@@ -344,6 +372,7 @@ export async function resubmitApplication(applicationId: string, input: any) {
   try {
     // Log the formatted data for debugging
     console.log('Submitting resubmission with formatted data:', JSON.stringify({
+      coordinates: input.location?.coordinates,
       applicationId,
       input
     }, null, 2));
