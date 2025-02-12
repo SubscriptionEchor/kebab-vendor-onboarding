@@ -1,12 +1,6 @@
 import { API_CONFIG } from './config';
 import type { APIResponse } from './types';
-
-class APIError extends Error {
-  constructor(public errors: any[], message?: string) {
-    super(message || 'API Error');
-    this.name = 'APIError';
-  }
-}
+import { APIError, NetworkError, handleAPIError } from '../utils/api';
 
 export async function graphqlRequest<T>(
   query: string,
@@ -25,13 +19,11 @@ export async function graphqlRequest<T>(
       requestHeaders.Authorization = `Bearer ${token}`;
     }
 
-    // Ensure variables is never undefined
     const requestBody = JSON.stringify({
       query,
       variables: variables || {},
     });
 
-    // Log request details only in development
     if (process.env.NODE_ENV === 'development') {
       console.debug('GraphQL Request:', {
         url: API_CONFIG.BASE_URL,
@@ -49,46 +41,51 @@ export async function graphqlRequest<T>(
 
     if (!response.ok) {
       const errorResponse = await response.text();
-      let errorMessage = `Request failed with status ${response.status}`;
+      let errorData;
       
-      if (response.status === 401) {
-        throw new Error('Session expired. Please log in again.');
-      } else if (response.status === 400) {
-        try {
-          const errorData = JSON.parse(errorResponse);
-          if (errorData.errors?.[0]?.message) {
-            errorMessage = errorData.errors[0].message;
-          }
-        } catch (e) {
-          // If parsing fails, use the raw error response
-          errorMessage = errorResponse;
-        }
+      try {
+        errorData = JSON.parse(errorResponse);
+      } catch {
+        errorData = { message: errorResponse };
       }
-      
-      throw new Error(errorMessage);
+
+      throw new APIError(
+        response.status,
+        errorData.errors?.[0]?.message || 'Request failed',
+        errorData
+      );
     }
 
     const result = await response.json() as APIResponse<T>;
     
-    // Log response only in development
     if (result.errors) {
-      const errorMessage = result.errors[0]?.message || 'An error occurred';
-      if (errorMessage.toLowerCase().includes('unauthorized')) {
-        throw new Error('Please log in again to continue');
+      const error = result.errors[0];
+      if (error.message.toLowerCase().includes('unauthorized')) {
+        throw new APIError(401, 'Please log in again to continue');
       }
-      // Format validation errors nicely
-      if (errorMessage.includes('validation failed')) {
-        const validationErrors = result.errors
-          .map(error => error.message)
-          .join('. ');
-        throw new Error(`Validation failed: ${validationErrors}`);
+
+      if (error.message.includes('validation failed')) {
+        const validationErrors = result.errors.reduce((acc, err) => {
+          const field = err.path[err.path.length - 1];
+          if (!acc[field]) acc[field] = [];
+          acc[field].push(err.message);
+          return acc;
+        }, {} as Record<string, string[]>);
+
+        throw new APIError(400, 'Validation failed', {
+          errors: validationErrors
+        });
       }
-      // Handle internal server errors with more detail
-      if (errorMessage.includes('Internal Server Error')) {
+
+      if (error.message.includes('Internal Server Error')) {
         console.error('GraphQL Error Details:', result.errors);
-        throw new Error('The server encountered an error. Please try again later.');
+        throw new APIError(
+          500,
+          'The server encountered an error. Please try again later.'
+        );
       }
-      throw new Error(errorMessage);
+
+      throw new APIError(400, error.message);
     }
 
     if (process.env.NODE_ENV === 'development') {
@@ -97,14 +94,6 @@ export async function graphqlRequest<T>(
 
     return result.data;
   } catch (error) {
-    if (error instanceof APIError) {
-      throw error;
-    } else if (error instanceof Error) {
-      if (error.message.includes('Failed to fetch')) {
-        throw new Error('Network error. Please check your connection and try again.');
-      }
-      throw error;
-    }
-    throw new Error('Failed to fetch data from API');
+    return handleAPIError(error);
   }
 }

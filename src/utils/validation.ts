@@ -4,15 +4,41 @@ export function validateEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-// Phone number validation
-export function validatePhone(phone: string): boolean {
+// German postal code validation
+export function validateGermanPostalCode(postalCode: string): boolean {
+  return /^[0-9]{5}$/.test(postalCode);
+}
+
+// German phone number validation
+export function validateGermanPhone(phone: string): boolean {
   // Remove all non-digit characters
   const cleanPhone = phone.replace(/\D/g, '');
   
-  // Check if the number has valid length
-  // Indian numbers: 10 digits
-  // German numbers: 10-11 digits
+  // German numbers should be 10-11 digits after removing country code
+  if (cleanPhone.startsWith('49')) {
+    return cleanPhone.length >= 12 && cleanPhone.length <= 13;
+  }
   return cleanPhone.length >= 10 && cleanPhone.length <= 11;
+}
+
+// Indian phone number validation
+export function validateIndianPhone(phone: string): boolean {
+  // Remove all non-digit characters
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Indian numbers should be exactly 10 digits after removing country code
+  if (cleanPhone.startsWith('91')) {
+    return cleanPhone.length === 12;
+  }
+  return cleanPhone.length === 10;
+}
+
+// Phone number validation
+export function validatePhone(phone: string, countryCode: string): boolean {
+  if (!phone) return false;
+  return countryCode === 'IN' ? 
+    validateIndianPhone(phone) : 
+    validateGermanPhone(phone);
 }
 
 // OTP validation

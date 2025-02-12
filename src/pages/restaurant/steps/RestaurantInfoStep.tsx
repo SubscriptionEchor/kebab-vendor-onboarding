@@ -178,7 +178,16 @@ interface AdditionalOwner {
 }
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
 import { useFormValidation } from '../../../hooks/useFormValidation';
-import { validateCompanyName, validateRestaurantName, validateEmail, validatePhone, validateAddress, validateLocation, validatePassportId } from '../../../utils/validation';
+import { 
+  validateCompanyName, 
+  validateRestaurantName, 
+  validateEmail, 
+  validatePhone, 
+  validateAddress, 
+  validateLocation, 
+  validatePassportId,
+  validateGermanPostalCode 
+} from '../../../utils/validation';
 
 interface RestaurantInfoStepProps {
   onNext: () => void;
@@ -221,9 +230,6 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const [formData, setFormData] = useState({
     // Company Details
     companyName: '',
-    companyEmail: '',
-    companyPhone: '',
-    companyCountryCode: 'DE',
     
     // Restaurant Details
     restaurantName: '',
@@ -254,6 +260,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     currency: 'EUR',
     hasMultipleOwners: false,
   });
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [additionalOwners, setAdditionalOwners] = useState<AdditionalOwner[]>([]);
   const { errors, validate, clearErrors } = useFormValidation({
     companyName: validateCompanyName,
@@ -387,55 +394,107 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    const validationErrors = [];
 
-    // Format address according to backend expectations:
-    // "Street Number, Postal Code City, State, Country"
-    const formattedAddress = [
-      // Street and number
-      `${formData.address.street} ${formData.address.number}`.trim(),
-      // Postal code and city
-      `${formData.address.postalCode} ${formData.address.city}`.trim(),
-      // State (Berlin)
-      'Berlin',
-      // Country
-      formData.address.country
-    ].filter(Boolean).join(', ');
+    // Validate required fields
+    if (!formData.companyName.trim()) {
+      validationErrors.push('Company name is required');
+    }
 
-    const validationData = {
-      companyName: formData.companyName,
-      restaurantName: formData.restaurantName,
-      restaurantEmail: formData.restaurantEmail,
-      restaurantPhone: formData.restaurantPhone,
-      address: formattedAddress,
-      ownerName: formData.ownerName,
-      passportId: formData.passportId,
-      email: formData.email,
-      phone: formData.phone,
-    };
+    if (!formData.restaurantName.trim()) {
+      validationErrors.push('Restaurant name is required');
+    }
 
-    if (validate(validationData)) {
-      // Helper function to format phone numbers correctly
-      function formatPhoneNumber(phone: string, countryCode: string): string {
-        // Remove all non-digit characters and leading zeros
-        let digits = phone.replace(/\D/g, '').replace(/^0+/, '');
-        
-        // Remove existing country code if present
-        const germanPrefix = '49';
-        const indianPrefix = '91';
-        if (digits.startsWith(germanPrefix) && countryCode === 'DE') {
-          digits = digits.substring(2);
-        } else if (digits.startsWith(indianPrefix) && countryCode === 'IN') {
-          digits = digits.substring(2);
-        }
-        
-        // For Indian numbers, ensure exactly 10 digits
-        if (countryCode === 'IN') {
-          digits = digits.slice(-10);
-        }
-        
-        // Add the appropriate country code prefix
-        return `+${countryCode === 'IN' ? indianPrefix : germanPrefix}${digits}`;
+    if (!formData.restaurantEmail.trim()) {
+      validationErrors.push('Restaurant email is required');
+    }
+
+    if (!formData.restaurantPhone.trim()) {
+      validationErrors.push('Restaurant phone is required');
+    }
+
+    if (!formData.ownerName.trim()) {
+      validationErrors.push('Owner name is required');
+    }
+
+    if (!formData.email.trim()) {
+      validationErrors.push('Email is required');
+    }
+
+    if (!formData.phone.trim()) {
+      validationErrors.push('Phone number is required');
+    }
+
+    if (!formData.passportId.trim()) {
+      validationErrors.push('Passport ID is required');
+    }
+
+    if (!formData.address.street.trim()) {
+      validationErrors.push('Street is required');
+    }
+
+    if (!formData.address.number.trim()) {
+      validationErrors.push('Street number is required');
+    }
+
+    if (!formData.address.postalCode.trim()) {
+      validationErrors.push('Postal code is required');
+    }
+
+    // Validate postal code
+    if (!validateGermanPostalCode(formData.address.postalCode)) {
+      validationErrors.push('Please enter a valid German postal code (5 digits)');
+    }
+
+    // Validate phone numbers
+    if (!validatePhone(formData.phone, formData.countryCode)) {
+      validationErrors.push(
+        formData.countryCode === 'IN' 
+          ? 'Please enter a valid Indian phone number (10 digits)' 
+          : 'Please enter a valid German phone number (10-11 digits)'
+      );
+    }
+
+    if (!validatePhone(formData.restaurantPhone, formData.restaurantCountryCode)) {
+      validationErrors.push(
+        formData.restaurantCountryCode === 'IN'
+          ? 'Please enter a valid Indian restaurant phone number (10 digits)'
+          : 'Please enter a valid German restaurant phone number (10-11 digits)'
+      );
+    }
+
+    // Validate additional owners' phone numbers
+    additionalOwners.forEach((owner, index) => {
+      if (!validatePhone(owner.phone, owner.countryCode)) {
+        validationErrors.push(
+          owner.countryCode === 'IN'
+            ? `Additional owner ${index + 1}: Please enter a valid Indian phone number (10 digits)`
+            : `Additional owner ${index + 1}: Please enter a valid German phone number (10-11 digits)`
+        );
       }
+    });
+
+    if (validationErrors.length > 0) {
+      console.log('Validation errors:', validationErrors);
+      setValidationErrors(validationErrors);
+      return;
+    }
+
+    try {
+      // Format address according to backend expectations
+      const formattedAddress = [
+        `${formData.address.street} ${formData.address.number}`.trim(),
+        `${formData.address.postalCode} ${formData.address.city}`.trim(),
+        'Berlin',
+        formData.address.country
+      ].filter(Boolean).join(', ');
+
+      // Helper function to format phone numbers
+      const formatPhoneNumber = (phone: string, countryCode: string): string => {
+        const digits = phone.replace(/\D/g, '').replace(/^0+/, '');
+        const prefix = countryCode === 'IN' ? '91' : '49';
+        return `+${prefix}${digits}`;
+      };
 
       // Format phone numbers for additional owners
       const formattedAdditionalOwners = additionalOwners.map(owner => ({
@@ -447,7 +506,8 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         idCardDocuments: [],
       }));
 
-      const applicationData = {
+      // Prepare application data
+      await updateApplication({
         companyName: formData.companyName,
         restaurantName: formData.restaurantName,
         // Format restaurant contact info
@@ -478,10 +538,16 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
           },
           ...formattedAdditionalOwners,
         ],
-      };
+      });
 
-      updateApplication(applicationData);
       onNext();
+    } catch (error) {
+      console.error('Form submission error:', error);
+      if (error instanceof Error) {
+        setValidationErrors(prev => [...prev, error.message]);
+      } else {
+        setValidationErrors(prev => [...prev, 'An unexpected error occurred']);
+      }
     }
   };
 
@@ -506,13 +572,13 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       onSubmit={handleSubmit}
       className="max-w-2xl mx-auto space-y-8"
     >
-      {errors.length > 0 && (
+      {validationErrors.length > 0 && (
         <div className="space-y-2">
-          {errors.map((error, index) => (
+          {validationErrors.map((error, index) => (
             <ErrorAlert
               key={index}
-              message={error.message}
-              onClose={() => clearErrors()}
+              message={error}
+              onClose={() => setValidationErrors([])}
             />
           ))}
         </div>
@@ -819,12 +885,14 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
           <div>
             <RequiredLabel>Postal Code</RequiredLabel>
             <Input
+              pattern="[0-9]{5}"
+              maxLength={5}
               value={formData.address.postalCode}
               onChange={(e) => setFormData({
                 ...formData,
                 address: { ...formData.address, postalCode: e.target.value }
               })}
-              placeholder="Enter postal code"
+              placeholder="Enter postal code (e.g., 10115)"
               className="h-11"
               required
             />
@@ -836,4 +904,58 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
           <p className="text-sm text-gray-600 mb-2">
             Please select a location within Berlin city limits (highlighted area)
           </p>
-          <div className="relative h-[400px] rounded-xl overflow-hidden shadow-lg">
+          <div className="relative h-96 rounded-xl overflow-hidden shadow-lg z-0">
+            <MapContainer
+              center={[formData.location.lat, formData.location.lng]}
+              zoom={13}
+              style={{ height: '100%', width: '100%' }}
+              className="z-0"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <SearchControl onLocationSelect={(location) => {
+                setFormData(prev => ({
+                  ...prev,
+                  location: {
+                    lat: location.lat,
+                    lng: location.lng
+                  },
+                  address: {
+                    ...prev.address,
+                    ...(location.address ? parseAddress(location.address) : {})
+                  }
+                }));
+              }} />
+              <Marker
+                position={[formData.location.lat, formData.location.lng]}
+                draggable={true}
+                eventHandlers={{
+                  dragend: (e) => {
+                    const marker = e.target;
+                    const position = marker.getLatLng();
+                    setFormData(prev => ({
+                      ...prev,
+                      location: {
+                        lat: position.lat,
+                        lng: position.lng
+                      }
+                    }));
+                  }
+                }}
+              />
+            </MapContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="flex justify-end pt-8">
+        <Button type="submit" size="lg">
+          Next Step
+        </Button>
+      </div>
+    </motion.form>
+  );
+}

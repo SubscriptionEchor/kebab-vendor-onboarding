@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Clock,
   CheckCircle2,
@@ -14,6 +14,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { getApplications } from '../services/restaurant';
 import { useToast } from '../context/ToastContext';
+import { VirtualizedList } from '../components/ui/VirtualizedList';
+import { OptimizedImage } from '../components/ui/OptimizedImage';
 
 interface Application {
   id: string;
@@ -243,14 +245,19 @@ export function ApplicationsPage() {
             ))}
           </div>
         ) : filteredApplications.length > 0 ? (
-          <div className="space-y-4">
-            {filteredApplications.map((application) => {
+          <VirtualizedList
+            items={filteredApplications}
+            itemHeight={280}
+            containerHeight={600}
+            className="space-y-4 overflow-auto"
+            renderItem={(application, index) => {
               const { icon: StatusIcon, color } = getStatusIcon(application.status);
               return (
                 <motion.div
                   key={application.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
                   className="bg-white rounded-xl shadow-sm overflow-hidden"
                 >
                   <div className="p-6">
@@ -317,8 +324,8 @@ export function ApplicationsPage() {
                   </div>
                 </motion.div>
               );
-            })}
-          </div>
+            }}
+          />
         ) : (
           <div className="text-center py-12 bg-white rounded-lg shadow-sm">
             <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />

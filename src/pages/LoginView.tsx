@@ -19,14 +19,13 @@ export function LoginView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    
-    if (!validatePhone(phone)) {
-      setErrors(['Please enter a valid phone number']);
-      return;
-    }
 
-    if (!validatePhone(phone)) {
-      setErrors(['Please enter a valid phone number']);
+    if (!validatePhone(phone, countryCode)) {
+      setErrors([
+        countryCode === 'IN'
+          ? 'Please enter a valid Indian phone number (10 digits)'
+          : 'Please enter a valid German phone number (10-11 digits)'
+      ]);
       return;
     }
 

@@ -1,94 +1,76 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AuthContextType, User } from '../types/auth';
 import { sendPhoneOTP, verifyPhoneOTP } from '../services/auth';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getApplications } from '../services/restaurant';
-import { useNavigate } from 'react-router-dom';
-import { getCuisines } from '../services/restaurant'; 
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const SESSION_REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { showToast } = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [shouldFetchApplications, setShouldFetchApplications] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'expired' | 'refreshing' | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(
     localStorage.getItem('authToken')
   );
-  const [cuisines, setCuisines] = useState<Array<{ name: string }>>([]);
 
-  const fetchCuisines = async (token: string) => {
-    console.log('Starting cuisine fetch with token:', token);
-    if (!token) {
-      console.error('No auth token available');
-      setCuisines(getDefaultCuisines());
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Try to load from cache first
-    const cachedCuisines = localStorage.getItem('cachedCuisines');
-    if (cachedCuisines) {
-      try {
-        const parsed = JSON.parse(cachedCuisines);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log('Using cached cuisines:', parsed);
-          setCuisines(parsed);
-          setIsLoading(false);
-          return;
-        }
-      } catch (error) {
-        console.warn('Failed to parse cached cuisines:', error);
-        localStorage.removeItem('cachedCuisines');
-      }
-    }
-
+  // Function to parse JWT and get expiration time
+  const getTokenExpiration = (token: string): number => {
     try {
-      const response = await getCuisines();
-      console.log('Raw cuisine response:', response);
-      
-      if (response?.vendorOnboardingBootstrap?.cuisines) {
-        const cuisineData = response.vendorOnboardingBootstrap.cuisines;
-        console.log('Received cuisine data:', cuisineData);
-        
-        const uniqueCuisines = [...new Set(cuisineData.map(c => c.name))]
-          .map(name => ({ name: name.trim() }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        
-        console.log('Setting cuisines:', uniqueCuisines);
-        setCuisines(uniqueCuisines);
-        localStorage.setItem('cachedCuisines', JSON.stringify(uniqueCuisines));
-        console.log('Saved cuisines to cache:', uniqueCuisines);
-        return;
-      }
-      
-      throw new Error('No cuisine data received from API');
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000; // Convert to milliseconds
     } catch (error) {
-      console.warn('Failed to fetch cuisines, using defaults:', error);
-      setCuisines(getDefaultCuisines());
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to parse token:', error);
+      return 0;
     }
   };
 
-  const getDefaultCuisines = () => [
-    { name: 'Turkish' },
-    { name: 'Indian' },
-    { name: 'Italian' },
-    { name: 'German' },
-    { name: 'Mediterranean' },
-    { name: 'Asian' },
-    { name: 'Middle Eastern' },
-    { name: 'International' }
-  ];
+  // Function to check if token needs refresh
+  const needsRefresh = (expirationTime: number): boolean => {
+    return Date.now() >= (expirationTime - SESSION_REFRESH_THRESHOLD);
+  };
 
-  // Fetch cuisines when auth token changes
-  useEffect(() => {
-    if (authToken) {
-      fetchCuisines(authToken);
+  // Function to refresh the session
+  const refreshSession = async () => {
+    if (!authToken || sessionStatus === 'refreshing') return;
+
+    try {
+      setSessionStatus('refreshing');
+      // TODO: Implement actual token refresh logic here
+      // For now, we'll just verify the current token
+      const expirationTime = getTokenExpiration(authToken);
+      
+      if (Date.now() >= expirationTime) {
+        throw new Error('Session expired');
+      }
+      
+      setSessionStatus('active');
+    } catch (error) {
+      console.error('Session refresh failed:', error);
+      handleSessionExpired();
     }
-  }, [authToken]);
+  };
+
+  // Function to handle expired sessions
+  const handleSessionExpired = () => {
+    setSessionStatus('expired');
+    logout();
+    
+    // Only show toast and redirect if not already on login page
+    if (!location.pathname.includes('/login')) {
+      showToast('Your session has expired. Please log in again.', 'error');
+      navigate('/login', { 
+        state: { from: location.pathname },
+        replace: true 
+      });
+    }
+  };
 
   const login = async (phone: string, countryCode: string) => {
     setIsLoading(true);
@@ -105,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name: `Restaurant Owner (${countryCode})`,
         role: 'owner',
       });
-      
+      setSessionStatus('active');
       navigate('/verify-phone');
       return response.sendPhoneOtpForOnboardingVendorLogin.result;
     } catch (error) {
@@ -121,12 +103,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     // Clear application state on logout
-    setShouldFetchApplications(false);
     window.localStorage.removeItem('restaurantApplication');
     window.localStorage.removeItem('restaurantDocuments');
     window.localStorage.removeItem('authToken');
     window.sessionStorage.removeItem('currentStep');
     setUser(null);
+    setSessionStatus(null);
     setAuthToken(null);
   };
 
@@ -141,34 +123,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         name,
         role: 'owner',
       });
+      setSessionStatus('active');
     } finally {
       setIsLoading(false);
     }
   };
+
   // Monitor token expiration
   useEffect(() => {
     if (authToken) {
       try {
-        const payload = JSON.parse(atob(authToken.split('.')[1]));
-        const expirationTime = payload.exp * 1000; // Convert to milliseconds
-        setShouldFetchApplications(true);
+        const expirationTime = getTokenExpiration(authToken);
         
         if (Date.now() >= expirationTime) {
-          logout();
+          handleSessionExpired();
+        } else if (needsRefresh(expirationTime)) {
+          refreshSession();
         } else {
-          // Set timeout to logout when token expires
-          const timeout = setTimeout(() => {
-            logout();
+          setSessionStatus('active');
+          
+          // Set up refresh timer
+          const refreshTime = expirationTime - SESSION_REFRESH_THRESHOLD;
+          const refreshTimeout = setTimeout(() => {
+            refreshSession();
+          }, refreshTime - Date.now());
+          
+          // Set up expiration timer
+          const expirationTimeout = setTimeout(() => {
+            handleSessionExpired();
           }, expirationTime - Date.now());
           
-          return () => clearTimeout(timeout);
+          return () => {
+            clearTimeout(refreshTimeout);
+            clearTimeout(expirationTimeout);
+          };
         }
       } catch (error) {
         console.error('Error parsing token:', error);
-        logout();
+        handleSessionExpired();
       }
     }
-  }, [authToken, cuisines.length]);
+  }, [authToken]);
 
   return (
     <AuthContext.Provider
@@ -179,8 +174,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         register,
-        token: authToken,
-        cuisines,
+        refreshSession,
+        sessionStatus
       }}
     >
       {children}

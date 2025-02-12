@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
+import React, { memo } from 'react';
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Clock, Search } from "lucide-react";
+import { Clock, Search, AlertCircle } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { TimePicker } from "../../../components/ui/TimePicker";
 import { Input } from "../../../components/ui/Input";
 import { ImageUpload } from "../../../components/ui/ImageUpload";
-import { useAuth } from "../../../context/AuthContext";
+import { useCuisines } from '../../../hooks/useCuisines';
+import { ErrorBoundary } from '../../../components/ErrorBoundary';
 import { useRestaurantApplication } from "../../../context/RestaurantApplicationContext";
 import { useFormValidation } from "../../../hooks/useFormValidation";
 import {
@@ -38,10 +40,39 @@ type WeekSchedule = {
 
 const DEFAULT_CUISINE_TYPE = "Other";
 
+const CuisineItem = memo(({ 
+  cuisine,
+  isSelected,
+  isDisabled,
+  onSelect
+}: {
+  cuisine: { id: string; name: string };
+  isSelected: boolean;
+  isDisabled: boolean;
+  onSelect: (id: string) => void;
+}) => (
+  <button
+    type="button"
+    onClick={() => onSelect(cuisine.id)}
+    className={`p-4 rounded-lg text-left transition-all ${
+      isSelected
+        ? "bg-brand-primary/10 border-2 border-brand-primary shadow-md"
+        : isDisabled
+        ? "bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed"
+        : "bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md"
+    }`}
+    disabled={isDisabled}
+  >
+    <div className="font-medium">{cuisine.name}</div>
+  </button>
+));
+
+CuisineItem.displayName = 'CuisineItem';
+
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const { application, updateApplication } = useRestaurantApplication();
 
-  const { cuisines: availableCuisines } = useAuth();
+  const { cuisines: availableCuisines, isLoading: isLoadingCuisines, error: cuisineError, refreshCuisines } = useCuisines();
   const [restaurantImages, setRestaurantImages] = useState(
     () =>
       application?.restaurantImages?.map((img) => ({
@@ -84,7 +115,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isLoadingCuisines, setIsLoadingCuisines] = useState(false);
 
   // Initialize form data from application context
   useEffect(() => {
@@ -371,7 +401,32 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       </div>
 
       {/* Cuisine Selection */}
-      <div>
+      <ErrorBoundary
+        fallback={
+          <div className="p-6 bg-red-50 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-medium text-red-800 mb-2">
+                  Failed to load cuisines
+                </h3>
+                <p className="text-sm text-red-700 mb-4">
+                  {cuisineError?.message || 'An unexpected error occurred while loading cuisines'}
+                </p>
+                <Button
+                  onClick={refreshCuisines}
+                  variant="outline"
+                  size="sm"
+                  className="text-red-700 border-red-300 hover:bg-red-50"
+                >
+                  Try again
+                </Button>
+              </div>
+            </div>
+          </div>
+        }
+      >
+        <div>
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           Kebab Cuisines
         </h2>
@@ -414,24 +469,16 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredCuisines.map((cuisine) => (
-                <button
-                key={cuisine.id}
-                type="button"
-                onClick={() => handleCuisineToggle(cuisine.id)}
-                className={`p-4 rounded-lg text-left transition-all ${
-                  selectedCuisines.includes(cuisine.name)
-                    ? "bg-brand-primary/10 border-2 border-brand-primary shadow-md"
-                    : selectedCuisines.length >= 3
-                    ? "bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed"
-                    : "bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md"
-                }`}
-                disabled={
-                  selectedCuisines.length >= 3 &&
-                  !selectedCuisines.includes(cuisine.name)
-                }
-              >
-                <div className="font-medium">{cuisine.name}</div>
-              </button>
+                <CuisineItem
+                  key={cuisine.id}
+                  cuisine={cuisine}
+                  isSelected={selectedCuisines.includes(cuisine.name)}
+                  isDisabled={
+                    selectedCuisines.length >= 3 &&
+                    !selectedCuisines.includes(cuisine.name)
+                  }
+                  onSelect={handleCuisineToggle}
+                />
               ))}
             </div>
 
@@ -449,7 +496,8 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
             <p>Failed to load cuisines. Please try refreshing the page.</p>
           </div>
         )}
-      </div>
+        </div>
+      </ErrorBoundary>
 
       {/* Opening Hours */}
       <div>

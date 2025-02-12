@@ -1,15 +1,16 @@
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
 import { RestaurantApplicationProvider } from './context/RestaurantApplicationContext';
 import { MainLayout } from './layouts/MainLayout';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { VerifyPhonePage } from './pages/VerifyPhonePage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './pages/LoginView';
-import { ToastProvider } from './context/ToastContext';
 import { VerifyOTPPage } from './pages/VerifyOTPPage';
 import { ApplicationsPage } from './pages/ApplicationsPage';
+import { RootErrorBoundary } from './components/RootErrorBoundary';
 import { RestaurantRegistrationPage } from './pages/restaurant/RestaurantRegistrationPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
@@ -33,8 +34,9 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
 function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
+    <RootErrorBoundary>
+    <ToastProvider>
+      <AuthProvider>
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginView />} />
@@ -53,8 +55,9 @@ function App() {
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </ToastProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </ToastProvider>
+    </RootErrorBoundary>
   );
 
 }
