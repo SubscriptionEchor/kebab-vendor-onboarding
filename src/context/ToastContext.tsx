@@ -14,6 +14,7 @@ export function useToast() {
   }
   return context;
 }
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<{
     message: string;

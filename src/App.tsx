@@ -11,6 +11,7 @@ import { LoginView } from './pages/LoginView';
 import { VerifyOTPPage } from './pages/VerifyOTPPage';
 import { ApplicationsPage } from './pages/ApplicationsPage';
 import { RootErrorBoundary } from './components/RootErrorBoundary';
+import { ProfilePage } from './pages/ProfilePage.tsx';
 import { RestaurantRegistrationPage } from './pages/restaurant/RestaurantRegistrationPage';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
@@ -49,6 +50,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/restaurants/new" element={<RestaurantRegistrationPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/applications" element={<ApplicationsPage />} />
           </Route>
           

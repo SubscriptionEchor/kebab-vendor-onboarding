@@ -1,11 +1,12 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { Upload, X, Image as ImageIcon, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "../../context/ToastContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import {
   FILE_SIZE_LIMITS,
   ALLOWED_FILE_TYPES,
-} from "../../utils/fileValidation";
+} from "../../constants/fileUpload";
 import { ErrorAlert } from "./ErrorAlert";
 
 interface ImageUploadProps {
@@ -30,6 +31,7 @@ export function ImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const { upload, isUploading, progress, error } = useFileUpload({
     validationOptions: {
@@ -52,6 +54,7 @@ export function ImageUpload({
     },
     onError: (error) => {
       setUploadError(error.message);
+      showToast(error.message, 'error');
     },
   });
 
@@ -59,6 +62,7 @@ export function ImageUpload({
     const files = Array.from(e.target.files || []);
     if (files.length + images.length > maxImages) {
       setUploadError(`You can only upload up to ${maxImages} images`);
+      showToast(`You can only upload up to ${maxImages} images`, 'error');
       return;
     }
 
@@ -68,6 +72,7 @@ export function ImageUpload({
       console.error("Failed to upload files:", error);
       if (error instanceof Error) {
         setUploadError(error.message);
+        showToast(error.message, 'error');
       }
     }
   };
@@ -79,6 +84,7 @@ export function ImageUpload({
     const files = Array.from(e.dataTransfer.files);
     if (files.length + images.length > maxImages) {
       setUploadError(`You can only upload up to ${maxImages} images`);
+      showToast(`You can only upload up to ${maxImages} images`, 'error');
       return;
     }
 
@@ -89,6 +95,7 @@ export function ImageUpload({
       setUploadError(
         error instanceof Error ? error.message : "Failed to upload files"
       );
+      showToast(error instanceof Error ? error.message : "Failed to upload files", 'error');
     }
   };
 

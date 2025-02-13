@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { useNavigate, Link } from 'react-router-dom';
@@ -43,9 +43,16 @@ export function Navbar() {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                <div className="flex items-center space-x-2">
-                  <User className="h-5 w-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">{user.name}</span>
+                <div className="relative group">
+                  <button
+                    className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    onClick={() => navigate('/profile')}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center">
+                      <User className="h-4 w-4 text-brand-primary" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                  </button>
                 </div>
                 <Button
                   variant="ghost"

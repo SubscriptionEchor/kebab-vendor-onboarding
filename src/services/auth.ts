@@ -59,7 +59,12 @@ const VERIFY_EMAIL_OTP = `
 export async function sendPhoneOTP(phoneNumber: string) {
   console.log('Sending phone OTP for:', phoneNumber);
   try {
-    return graphqlRequest<SendPhoneOTPResponse>(SEND_PHONE_OTP, { phoneNumber });
+    // Ensure phone number has proper country code
+    const formattedPhone = phoneNumber.startsWith('+') ? 
+      phoneNumber : 
+      `+${phoneNumber.replace(/^0+/, '')}`;
+
+    return graphqlRequest<SendPhoneOTPResponse>(SEND_PHONE_OTP, { phoneNumber: formattedPhone });
   } catch (error) {
     console.error('Failed to send OTP:', error);
     if (error instanceof Error) {
@@ -72,12 +77,31 @@ export async function sendPhoneOTP(phoneNumber: string) {
 export async function verifyPhoneOTP(phoneNumber: string, otp: string) {
   console.log('Verifying phone OTP for:', phoneNumber);
   try {
-    return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { phoneNumber, otp });
+    if (!phoneNumber) {
+      throw new Error('Phone number is required');
+    }
+    
+    // Clean and validate OTP
+    const cleanOtp = otp.replace(/\D/g, '');
+    if (!cleanOtp || cleanOtp.length !== 4) {
+      throw new Error('Invalid verification code format');
+    }
+
+    return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { 
+      phoneNumber: phoneNumber.trim(),
+      otp: cleanOtp
+    });
   } catch (error) {
     console.error('Phone verification failed:', error);
     if (error instanceof Error) {
       if (error.message.includes('401') || error.message.includes('unauthorized')) {
         throw new Error('Session expired. Please try again.');
+      } else if (error.message.includes('validation')) {
+        throw new Error('Please enter a valid 4-digit verification code');
+      } else if (error.message.includes('expired')) {
+        throw new Error('Verification code has expired. Please request a new code');
+      } else if (error.message.includes('invalid') || error.message.includes('incorrect')) {
+        throw new Error('Invalid verification code. Please try again');
       }
       throw new Error(error.message || 'Invalid verification code');
     }

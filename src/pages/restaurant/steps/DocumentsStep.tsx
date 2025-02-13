@@ -1,20 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FileText, AlertCircle } from 'lucide-react';
-import { RequiredLabel } from './RestaurantInfoStep';
 import { useToast } from '../../../context/ToastContext';
-
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
 import { useFormValidation } from '../../../hooks/useFormValidation';
-import { validateDocument, validateBankAccount, validateBIC } from '../../../utils/validation';
 import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
-import { Input } from '../../../components/ui/Input';
 import { SuccessDialog } from '../../../components/ui/SuccessDialog';
 import { useLocation } from 'react-router-dom';
 import { resubmitApplication } from '../../../services/restaurant';
-import { ImageUpload } from '../../../components/ui/ImageUpload';
+import { BusinessDocuments, BankDetails } from './components/Documents';
+import { AlertCircle } from 'lucide-react';
 
 interface DocumentsStepProps {
   onBack: () => void;
@@ -113,8 +109,8 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
-    setErrors([]);
     setIsSubmitting(true);
+    setErrors([]);
     
     console.log('Starting form submission with documents:', documents);
     
@@ -379,6 +375,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       onSubmit={handleSubmit}
       className="space-y-8"
     >
+      {/* Error Alerts */}
       {errors.length > 0 && (
         <div className="space-y-2">
           {errors.map((error, index) => (
@@ -390,10 +387,10 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           ))}
         </div>
       )}
-
+      
       {/* Document Upload Section */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Required Documents</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Required Documents</h2>
         <div className="bg-brand-accent/10 rounded-lg p-4 mb-6">
           <div className="flex gap-2 text-sm text-gray-600">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -403,118 +400,17 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
             </p>
           </div>
         </div>
-
-        <div className="grid gap-6">
-          {documentTypes.map((doc) => (
-            <div
-              key={`doc-type-${doc.key}`}
-              className="bg-white rounded-lg border border-gray-200 p-6"
-            >
-              <div className="flex items-start gap-4 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-brand-primary" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">{doc.label}</h3>
-                  <p className="text-sm text-gray-600">{doc.description}</p>
-                </div>
-              </div>
-              <ImageUpload
-                label="Upload Document"
-                maxImages={doc.key === 'idCards' ? 2 : 1}
-                acceptDocuments={true}
-                images={documents[doc.key]}
-                onImagesChange={(images) => 
-                  setDocuments(prev => ({ ...prev, [doc.key]: images }))
-                }
-                required={doc.required}
-              />
-            </div>
-          ))}
-        </div>
       </div>
 
-      {/* Bank Details Section */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bank Account Details</h2>
-        <p className="text-sm text-gray-600 mb-6">Optional: You can provide your bank details now or add them later</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white rounded-lg border border-gray-200 p-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank Name
-            </label>
-            <Input
-              value={bankDetails.bankName}
-              onChange={(e) => setBankDetails(prev => ({
-                ...prev,
-                bankName: e.target.value
-              }))}
-              placeholder="Enter bank name"
-              className="h-11"
-            />
-          </div>
+      <BusinessDocuments
+        documents={documents}
+        setDocuments={setDocuments}
+      />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Holder Name
-            </label>
-            <Input
-              value={bankDetails.accountHolderName}
-              onChange={(e) => setBankDetails(prev => ({
-                ...prev,
-                accountHolderName: e.target.value
-              }))}
-              placeholder="Enter account holder name"
-              className="h-11"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Account Number
-            </label>
-            <Input
-              value={bankDetails.accountNumber}
-              onChange={(e) => setBankDetails(prev => ({
-                ...prev,
-                accountNumber: e.target.value
-              }))}
-              placeholder="Enter account number"
-              className="h-11"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Branch Name
-            </label>
-            <Input
-              value={bankDetails.branchName}
-              onChange={(e) => setBankDetails(prev => ({
-                ...prev,
-                branchName: e.target.value
-              }))}
-              placeholder="Enter branch name"
-              className="h-11"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm text-gray-700 mb-1">
-              Bank Identifier Code (BIC/SWIFT)
-            </label>
-            <Input
-              value={bankDetails.bankIdentifierCode}
-              onChange={(e) => setBankDetails(prev => ({
-                ...prev,
-                bankIdentifierCode: e.target.value
-              }))}
-              placeholder="Enter BIC/SWIFT code"
-              className="h-11"
-            />
-          </div>
-        </div>
-      </div>
+      <BankDetails
+        bankDetails={bankDetails}
+        setBankDetails={setBankDetails}
+      />
 
       {/* Terms and Conditions */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

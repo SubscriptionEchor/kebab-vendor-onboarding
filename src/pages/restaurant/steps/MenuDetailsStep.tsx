@@ -1,14 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
-import React, { memo } from 'react';
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Clock, Search, AlertCircle } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
-import { TimePicker } from "../../../components/ui/TimePicker";
-import { Input } from "../../../components/ui/Input";
-import { ImageUpload } from "../../../components/ui/ImageUpload";
 import { useCuisines } from '../../../hooks/useCuisines';
-import { ErrorBoundary } from '../../../components/ErrorBoundary';
 import { useRestaurantApplication } from "../../../context/RestaurantApplicationContext";
 import { useFormValidation } from "../../../hooks/useFormValidation";
 import {
@@ -17,6 +10,7 @@ import {
   validateOpeningHours,
 } from "../../../utils/validation";
 import { DEFAULT_BUSINESS_HOURS } from "../../../config/defaults";
+import { CuisineSelection, OpeningHours, RestaurantImages } from './components/MenuDetails';
 
 interface MenuDetailsStepProps {
   onNext: () => void;
@@ -40,39 +34,10 @@ type WeekSchedule = {
 
 const DEFAULT_CUISINE_TYPE = "Other";
 
-const CuisineItem = memo(({ 
-  cuisine,
-  isSelected,
-  isDisabled,
-  onSelect
-}: {
-  cuisine: { id: string; name: string };
-  isSelected: boolean;
-  isDisabled: boolean;
-  onSelect: (id: string) => void;
-}) => (
-  <button
-    type="button"
-    onClick={() => onSelect(cuisine.id)}
-    className={`p-4 rounded-lg text-left transition-all ${
-      isSelected
-        ? "bg-brand-primary/10 border-2 border-brand-primary shadow-md"
-        : isDisabled
-        ? "bg-gray-50 border-2 border-gray-200 opacity-50 cursor-not-allowed"
-        : "bg-white border-2 border-gray-200 hover:border-brand-primary/50 hover:shadow-md"
-    }`}
-    disabled={isDisabled}
-  >
-    <div className="font-medium">{cuisine.name}</div>
-  </button>
-));
-
-CuisineItem.displayName = 'CuisineItem';
-
 export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const { application, updateApplication } = useRestaurantApplication();
 
-  const { cuisines: availableCuisines, isLoading: isLoadingCuisines, error: cuisineError, refreshCuisines } = useCuisines();
+  const { cuisines: availableCuisines, isLoading: isLoadingCuisines, error, refreshCuisines } = useCuisines();
   const [restaurantImages, setRestaurantImages] = useState(
     () =>
       application?.restaurantImages?.map((img) => ({
@@ -105,15 +70,11 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         ]
       : []
   );
-  const cuisines = useMemo(() => 
-    availableCuisines.map(cuisine => ({
-      id: `cuisine-${cuisine.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).substr(2, 9)}`,
-      name: cuisine.name
-    })),
-    [availableCuisines]
-  );
+  const cuisines = availableCuisines.map(cuisine => ({
+    id: `cuisine-${cuisine.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Math.random().toString(36).substr(2, 9)}`,
+    name: cuisine.name
+  }));
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
-  const [cuisineSearch, setCuisineSearch] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Initialize form data from application context
@@ -161,9 +122,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   // Initialize selected cuisines from application state
   useEffect(() => {
     if (application?.cuisines && cuisines.length > 0) {
-      console.log('Initializing cuisines from application:', application.cuisines);
-      console.log('Available cuisines:', cuisines);
-
       const normalizedCuisines = application.cuisines
         .map(cuisine => {
           const name = typeof cuisine === 'string' ? cuisine : cuisine.name;
@@ -173,7 +131,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
           cuisines.some(c => c.name.toLowerCase() === name.toLowerCase())
         );
 
-      console.log('Normalized cuisines:', normalizedCuisines);
       setSelectedCuisines(normalizedCuisines);
     }
   }, [application, cuisines.length]);
@@ -217,38 +174,19 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     }
   }, [application]);
 
-
-  const filteredCuisines = useMemo(
-    () =>
-      cuisines.filter((cuisine) => {
-        const matchesSearch = cuisine.name
-          ?.toLowerCase()
-          .toLowerCase()
-          .includes(cuisineSearch.toLowerCase());
-        return matchesSearch;
-      }),
-    [cuisines, cuisineSearch]
-  );
-
   const handleCuisineToggle = (cuisineId: string) => {
     setSelectedCuisines((prev) => {
       const cuisineName = cuisines.find(c => c.id === cuisineId)?.name;
       if (!cuisineName) {
-        console.log('Cuisine not found for ID:', cuisineId);
         return prev;
       }
-
-      console.log('Toggling cuisine:', cuisineName);
   
       if (prev.includes(cuisineName)) {
-        console.log('Removing cuisine:', cuisineName);
         return prev.filter(name => name !== cuisineName);
       }
       if (prev.length >= 3) {
-        console.log('Maximum cuisines selected');
         return prev;
       }
-      console.log('Adding cuisine:', cuisineName);
       return [...prev, cuisineName];
     });
   };
@@ -277,7 +215,7 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
 
@@ -332,8 +270,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
         openingTimes,
       };
 
-      console.log("Submitting form data:", formData);
-
       // Update application and move to next step
       updateApplication(formData);
       onNext();
@@ -355,194 +291,30 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       onSubmit={handleSubmit}
       className="space-y-8"
     >
-      {/* Restaurant Profile Image */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Restaurant Profile
-        </h2>
-        <ImageUpload
-          label="Profile Image"
-          maxImages={1}
-          images={profileImage}
-          onImagesChange={setProfileImage}
-          required
-          className="mb-6"
+        <RestaurantImages
+          profileImage={profileImage}
+          setProfileImage={setProfileImage}
+          restaurantImages={restaurantImages}
+          setRestaurantImages={setRestaurantImages}
+          menuImages={menuImages}
+          setMenuImages={setMenuImages}
         />
       </div>
 
-      {/* Restaurant Images */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Restaurant Images
-        </h2>
-        <ImageUpload
-          label="Upload 2-4 high-quality images of your restaurant"
-          maxImages={4}
-          images={restaurantImages}
-          onImagesChange={setRestaurantImages}
-          required
-          className="mb-6"
-        />
-      </div>
+      <CuisineSelection
+        cuisines={cuisines}
+        selectedCuisines={selectedCuisines}
+        onCuisineToggle={handleCuisineToggle}
+        isLoadingCuisines={isLoadingCuisines}
+        cuisineError={error}
+        refreshCuisines={refreshCuisines}
+      />
 
-      {/* Menu Images */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Menu Images
-        </h2>
-        <ImageUpload
-          label="Upload 1-4 images of your menu"
-          maxImages={4}
-          images={menuImages}
-          onImagesChange={setMenuImages}
-          required
-          className="mb-6"
-        />
-      </div>
-
-      {/* Cuisine Selection */}
-      <ErrorBoundary
-        fallback={
-          <div className="p-6 bg-red-50 rounded-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0 mt-1" />
-              <div className="flex-1">
-                <h3 className="text-lg font-medium text-red-800 mb-2">
-                  Failed to load cuisines
-                </h3>
-                <p className="text-sm text-red-700 mb-4">
-                  {cuisineError?.message || 'An unexpected error occurred while loading cuisines'}
-                </p>
-                <Button
-                  onClick={refreshCuisines}
-                  variant="outline"
-                  size="sm"
-                  className="text-red-700 border-red-300 hover:bg-red-50"
-                >
-                  Try again
-                </Button>
-              </div>
-            </div>
-          </div>
-        }
-      >
-        <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Kebab Cuisines
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
-          Select 3 cuisines that best represent your restaurant (
-          {3 - selectedCuisines.length} selections remaining)
-        </p>
-
-        {/* Search and Filter */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Search cuisines..."
-                value={cuisineSearch}
-                onChange={(e) => setCuisineSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-        </div>
-
-        {isLoadingCuisines && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((_, index) => (
-              <motion.div
-                key={index}
-                className="h-24 rounded-lg bg-gray-100"
-                initial={{ opacity: 0.5 }}
-                animate={{ opacity: 1 }}
-                transition={{ repeat: Infinity, duration: 1 }}
-              />
-            ))}
-          </div>
-        )}
-
-        {!isLoadingCuisines && cuisines.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredCuisines.map((cuisine) => (
-                <CuisineItem
-                  key={cuisine.id}
-                  cuisine={cuisine}
-                  isSelected={selectedCuisines.includes(cuisine.name)}
-                  isDisabled={
-                    selectedCuisines.length >= 3 &&
-                    !selectedCuisines.includes(cuisine.name)
-                  }
-                  onSelect={handleCuisineToggle}
-                />
-              ))}
-            </div>
-
-            {filteredCuisines.length === 0 && cuisineSearch && (
-              <div className="text-center py-8 text-gray-500">
-                No cuisines found matching your search
-              </div>
-            )}
-          </>
-        )}
-        
-        {!isLoadingCuisines && cuisines.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-            <p>Failed to load cuisines. Please try refreshing the page.</p>
-          </div>
-        )}
-        </div>
-      </ErrorBoundary>
-
-      {/* Opening Hours */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          Opening Hours
-        </h2>
-        <div className="space-y-4">
-          {(Object.keys(schedule) as Array<keyof WeekSchedule>).map((day) => (
-            <div
-              key={day}
-              className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-200"
-            >
-              <div className="w-28 font-medium capitalize">{day}</div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={schedule[day].isOpen}
-                  onChange={(e) =>
-                    updateSchedule(day, "isOpen", e.target.checked)
-                  }
-                  className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
-                />
-                <span className="text-sm">Open</span>
-              </label>
-              {schedule[day].isOpen && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <TimePicker
-                      value={schedule[day].startTime}
-                      onChange={(time) =>
-                        updateSchedule(day, "startTime", time)
-                      }
-                    />
-                    <span>to</span>
-                    <TimePicker
-                      value={schedule[day].endTime}
-                      onChange={(time) => updateSchedule(day, "endTime", time)}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <OpeningHours
+        schedule={schedule}
+        updateSchedule={updateSchedule}
+      />
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">

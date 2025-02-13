@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface PhoneInputProps {
@@ -26,7 +26,25 @@ export default function PhoneInput({
   className = '',
 }: PhoneInputProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedCountry = countries.find(c => c.code === countryCode) || countries[0];
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow digits and spaces
+    const newValue = e.target.value.replace(/[^\d\s]/g, '');
+    onPhoneChange(newValue, countryCode);
+  };
 
   return (
     <div className="space-y-2">
@@ -37,6 +55,7 @@ export default function PhoneInput({
       )}
       <div className="relative flex">
         <button
+          ref={dropdownRef}
           type="button"
           className="flex items-center gap-1 px-3 py-2 border border-r-0 border-gray-300 rounded-l-lg bg-gray-50 text-gray-700 hover:bg-gray-100"
           onClick={() => setIsOpen(!isOpen)}
@@ -49,8 +68,10 @@ export default function PhoneInput({
           type="tel"
           value={value}
           className={`block flex-1 rounded-r-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-400 focus:border-brand-primary focus:ring-brand-primary sm:text-sm ${className}`}
-          onChange={(e) => onPhoneChange(e.target.value, countryCode)}
-          placeholder="Enter phone number"
+          onChange={handlePhoneChange}
+          placeholder={countryCode === 'IN' ? 
+            "e.g., 98765 43210" : 
+            "e.g., 151 1234 5678"}
           required={required}
         />
         
@@ -63,7 +84,7 @@ export default function PhoneInput({
                 type="button"
                 className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2"
                 onClick={() => {
-                  onPhoneChange(value, country.code);
+                  onPhoneChange('', country.code);
                   setIsOpen(false);
                 }}
               >

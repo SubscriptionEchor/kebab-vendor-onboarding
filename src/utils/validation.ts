@@ -4,6 +4,12 @@ export function validateEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
+// Name validation
+export function validateName(name: string): boolean {
+  // Only allow letters, spaces, and hyphens
+  return /^[A-Za-z\s-]+$/.test(name);
+}
+
 // German postal code validation
 export function validateGermanPostalCode(postalCode: string): boolean {
   return /^[0-9]{5}$/.test(postalCode);

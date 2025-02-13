@@ -13,7 +13,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    // Try to restore user from localStorage
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser);
+      } catch (error) {
+        console.error('Failed to parse saved user:', error);
+        return null;
+      }
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<'active' | 'expired' | 'refreshing' | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(
@@ -80,13 +92,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(response.sendPhoneOtpForOnboardingVendorLogin.message);
       }
       
-      setUser({
+      const newUser = {
         id: '1',
         email: '',
         phone,
         name: `Restaurant Owner (${countryCode})`,
         role: 'owner',
-      });
+      };
+      
+      setUser(newUser);
+      // Save user to localStorage
+      localStorage.setItem('user', JSON.stringify(newUser));
+      
       setSessionStatus('active');
       navigate('/verify-phone');
       return response.sendPhoneOtpForOnboardingVendorLogin.result;
@@ -103,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     // Clear application state on logout
+    localStorage.removeItem('user');
     window.localStorage.removeItem('restaurantApplication');
     window.localStorage.removeItem('restaurantDocuments');
     window.localStorage.removeItem('authToken');
@@ -115,14 +133,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (phone: string, countryCode: string, name: string) => {
     setIsLoading(true);
     try {
-      // TODO: Implement actual registration logic
-      setUser({
+      const newUser = {
         id: '1',
         email: '',
         phone,
         name,
         role: 'owner',
-      });
+      };
+      setUser(newUser);
+      // Save user to localStorage
+      localStorage.setItem('user', JSON.stringify(newUser));
+      
       setSessionStatus('active');
     } finally {
       setIsLoading(false);
@@ -190,3 +211,35 @@ export function useAuth() {
   }
   return context;
 }
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsLoading(true);
+  
+  // Check if user chose to skip email verification
+  const skipEmailVerification = localStorage.getItem('skipEmailVerification') === 'true';
+  
+  try {
+    const response = await verifyPhoneOTP(user.phone, otpString);
+    
+    if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
+      localStorage.setItem('authToken', response.verifyPhoneOtpForOnboardingVendorAndLogin.token);
+
+      if (response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor && !skipEmailVerification) {
+        navigate('/verify-email');
+        return;
+      } 
+      
+      // Clear the skip flag after use
+      localStorage.removeItem('skipEmailVerification');
+      navigate('/applications');
+    } else {
+      setErrors(['Verification failed. Please try again.']);
+    }
+  } catch (error) {
+    console.error('Verification error:', error);
+    setErrors(['An error occurred during verification.']);
+  } finally {
+    setIsLoading(false);
+  }
+};

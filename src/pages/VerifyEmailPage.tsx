@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ArrowLeft } from 'lucide-react';
 import { Input } from '../components/ui/Input';
+import { RefreshConfirmationDialog } from '../components/ui/RefreshConfirmationDialog';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { validateEmail } from '../utils/validation';
 import confetti from 'canvas-confetti';
@@ -16,7 +17,33 @@ export function VerifyEmailPage() {
   const [otp, setOtp] = useState('');
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showRefreshConfirmation, setShowRefreshConfirmation] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Handle beforeunload event
+  // Remove beforeunload handler to allow refresh
+
+  // Check for auth token on mount and refresh
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      navigate('/login');
+    }
+  }, [navigate]);
+
+  const handleRefreshConfirm = () => {
+    setShowRefreshConfirmation(false);
+  };
+
+  const handleBack = () => {
+    setShowRefreshConfirmation(true);
+  };
+
+  const handleBackConfirm = () => {
+    // Store a flag indicating the user chose to skip email verification
+    localStorage.setItem('skipEmailVerification', 'true');
+    navigate('/applications');
+  };
 
   const fireConfetti = () => {
     const count = 200;
@@ -118,6 +145,11 @@ export function VerifyEmailPage() {
         throw new Error('Email verification failed. Please try again.');
       }
 
+      // Store email verification status
+      localStorage.setItem('emailVerified', 'true');
+      // Store verified email
+      localStorage.setItem('verifiedEmail', email);
+
       // Show success animation
       fireConfetti();
       
@@ -157,8 +189,8 @@ export function VerifyEmailPage() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <button
-          onClick={() => navigate(-1)}
+        <button 
+          onClick={handleBack}
           className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-8"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -249,6 +281,15 @@ export function VerifyEmailPage() {
           </a>
         </div>
       </motion.div>
+      
+      {/* Refresh Confirmation Dialog */}
+      <RefreshConfirmationDialog
+        isOpen={showRefreshConfirmation}
+        onClose={() => setShowRefreshConfirmation(false)}
+        onConfirm={handleBackConfirm}
+        title="Skip Email Verification?"
+        message="If you go back now, you'll need to verify your email later in your profile settings. Do you want to continue?"
+      />
 
       {/* Right Side - Image */}
       <motion.div 

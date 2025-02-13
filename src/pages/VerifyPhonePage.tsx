@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
 import { verifyPhoneOTP, sendPhoneOTP } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
+import { RefreshConfirmationDialog } from '../components/ui/RefreshConfirmationDialog';
 import { getApplications } from '../services/restaurant';
 
 export function VerifyPhonePage() {
@@ -16,6 +17,7 @@ export function VerifyPhonePage() {
   const [timer, setTimer] = useState(30);
   const [errors, setErrors] = useState<string[]>([]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [showRefreshConfirmation, setShowRefreshConfirmation] = useState(false);
 
   useEffect(() => {
     if (!user?.phone) {
@@ -30,15 +32,36 @@ export function VerifyPhonePage() {
     }
   }, [timer]);
 
+  // Handle beforeunload event
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      setShowRefreshConfirmation(true);
+      // Chrome requires returnValue to be set
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  const handleRefreshConfirm = () => {
+    // Store a flag indicating the user chose to refresh
+    localStorage.setItem('skipEmailVerification', 'true');
+    window.location.reload();
+  };
+
   const handleChange = (index: number, value: string) => {
-    if (value.length > 1) return;
+    // Only allow digits
+    const cleanValue = value.replace(/\D/g, '');
+    if (cleanValue.length > 1) return;
     
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = cleanValue;
     setOtp(newOtp);
 
     // Move to next input if value is entered
-    if (value && index < 3) {
+    if (cleanValue && index < 3) {
       inputRefs.current[index + 1]?.focus();
     }
   };
@@ -68,19 +91,26 @@ export function VerifyPhonePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    const otpString = otp.join('');
 
-    if (otpString.length !== 4) {
-      setErrors(['Please enter the complete verification code']);
+    // Clean and validate OTP
+    const otpString = otp.join('');
+    const cleanOtp = otpString.replace(/\D/g, '');
+    
+    if (!cleanOtp || cleanOtp.length !== 4) {
+      setErrors(['Please enter a complete 4-digit verification code']);
+      return;
+    }
+
+    if (!user?.phone) {
+      setErrors(['Phone number not found. Please try logging in again']);
+      navigate('/login');
       return;
     }
 
     setIsLoading(true);
     try {
-      if (!user?.phone) {
-        throw new Error('Phone number not found');
-      }
       const response = await verifyPhoneOTP(user.phone, otpString);
+      setErrors([]); // Clear any existing errors on success
       
       if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
         // Store the token for future API calls
@@ -98,7 +128,20 @@ export function VerifyPhonePage() {
       }
     } catch (error) {
       console.error('Phone verification failed:', error);
-      setErrors(['Invalid verification code. Please try again.']);
+      let errorMessage = 'Verification failed. Please try again';
+      
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('invalid') || errorMessage.includes('incorrect')) {
+          errorMessage = 'Invalid verification code. Please try again';
+        } else if (errorMessage.includes('expired')) {
+          errorMessage = 'Verification code has expired. Please request a new code';
+          setTimer(0); // Enable resend button immediately
+          inputRefs.current[0]?.focus(); // Focus first input for new code
+        }
+      } else {
+        setErrors(['An unexpected error occurred. Please try again']);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -156,11 +199,15 @@ export function VerifyPhonePage() {
                 type="text"
                 inputMode="numeric"
                 pattern="\d*"
+                autoComplete="one-time-code"
                 maxLength={1}
                 value={digit}
                 onChange={e => handleChange(index, e.target.value)}
                 onKeyDown={e => handleKeyDown(index, e)}
-                className="w-12 h-14 text-center text-2xl font-semibold rounded-lg border border-gray-200 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20"
+                className={`w-12 h-14 text-center text-2xl font-semibold rounded-lg border ${
+                  errors.length > 0 ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : 
+                  'border-gray-200 focus:border-brand-primary focus:ring-brand-primary/20'
+                }`}
               />
             ))}
           </div>
@@ -200,6 +247,13 @@ export function VerifyPhonePage() {
           </a>
         </div>
       </motion.div>
+      
+      {/* Refresh Confirmation Dialog */}
+      <RefreshConfirmationDialog
+        isOpen={showRefreshConfirmation}
+        onClose={() => setShowRefreshConfirmation(false)}
+        onConfirm={handleRefreshConfirm}
+      />
 
       {/* Right Side - Image */}
       <motion.div 

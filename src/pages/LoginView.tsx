@@ -19,19 +19,22 @@ export function LoginView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
+    
+    // Clean the phone number
+    const cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
 
-    if (!validatePhone(phone, countryCode)) {
+    if (!validatePhone(cleanPhone, countryCode)) {
       setErrors([
         countryCode === 'IN'
-          ? 'Please enter a valid Indian phone number (10 digits)'
-          : 'Please enter a valid German phone number (10-11 digits)'
+          ? 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9'
+          : 'Please enter a valid German mobile number starting with 15, 16, or 17 (10-11 digits)'
       ]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const formattedPhone = `${countryCode === 'IN' ? '+91' : '+49'}${phone}`;
+      const formattedPhone = `${countryCode === 'IN' ? '+91' : '+49'}${cleanPhone}`;
       await login(formattedPhone, countryCode);
       navigate('/verify-phone');
     } catch (error) {
@@ -87,12 +90,13 @@ export function LoginView() {
         <form onSubmit={handleSubmit} className="space-y-6 max-w-md">
           <div className="space-y-2">
             <PhoneInput
+              key={countryCode} // Force re-render on country change
               label="Phone Number"
               value={phone}
               countryCode={countryCode}
               onPhoneChange={(newPhone, newCountryCode) => {
-                setPhone(newPhone);
                 setCountryCode(newCountryCode);
+                setPhone(newPhone);
               }}
               required
               className="text-lg"
