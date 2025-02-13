@@ -3,8 +3,8 @@ import { RequiredLabel } from '../RestaurantInfoStep';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import L from 'leaflet';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, AlertCircle, MapPin } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Search, AlertCircle, MapPin, Plus, Minus } from 'lucide-react';
 import { useToast } from '../../../../context/ToastContext';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-geosearch/dist/geosearch.css';
@@ -31,11 +31,15 @@ interface Location {
   address?: string;
 }
 
+import { validateArea } from '../../../../utils/validation';
+
 interface LocationDetailsProps {
   formData: {
     address: {
-      street: string;
+      doorNumber: string;
       number: string;
+      street: string;
+      area: string;
       city: string;
       postalCode: string;
       country: string;
@@ -48,15 +52,63 @@ interface LocationDetailsProps {
   setFormData: (data: any) => void;
 }
 
+function ZoomControl() {
+  const map = useMap();
+  
+  const handleZoomIn = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentZoom = map.getZoom();
+    map.setZoom(currentZoom + 1);
+  };
+
+  const handleZoomOut = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentZoom = map.getZoom();
+    map.setZoom(currentZoom - 1);
+  };
+
+  return (
+    <div className="leaflet-bottom leaflet-left" style={{ zIndex: 1000 }}>
+      <div className="flex flex-col gap-1 m-4">
+        <button
+          type="button"
+          className="w-8 h-8 bg-white rounded-lg shadow-md hover:bg-gray-50 active:bg-gray-100 flex items-center justify-center border border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/20 cursor-pointer"
+          title="Zoom in"
+          aria-label="Zoom in"
+          onClick={handleZoomIn}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <Plus className="w-5 h-5 text-gray-600" />
+        </button>
+        <button
+          type="button"
+          className="w-8 h-8 bg-white rounded-lg shadow-md hover:bg-gray-50 active:bg-gray-100 flex items-center justify-center border border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/20 cursor-pointer"
+          title="Zoom out"
+          aria-label="Zoom out"
+          onClick={handleZoomOut}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <Minus className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Location) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [outOfBounds, setOutOfBounds] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const map = useMap();
   const provider = new OpenStreetMapProvider();
   const { showToast } = useToast();
   const searchTimeout = useRef<NodeJS.Timeout>();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Add Berlin boundary rectangle
   useEffect(() => {
@@ -76,10 +128,24 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
     };
   }, [map]);
 
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
+          inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Debounced search function
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setResults([]);
+      setIsDropdownOpen(false);
       return;
     }
 
@@ -96,6 +162,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
         ]
       });
       setResults(results);
+      setIsDropdownOpen(true);
     } finally {
       setIsSearching(false);
     }
@@ -141,11 +208,12 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
     onLocationSelect(location);
     map.setView([location.lat, location.lng], 16);
     setResults([]);
+    setIsDropdownOpen(false);
     setSearchQuery('');
   };
 
   return (
-    <div className="absolute top-3 left-0 right-0 z-[999] mx-3">
+    <div className="absolute top-3 left-0 right-0 z-[1000] mx-3" ref={dropdownRef}>
       <div className="relative">
         <div className="bg-white/95 backdrop-blur-sm rounded-lg p-3 mb-3 shadow-lg border border-gray-200">
           <div className="flex items-center gap-2 text-sm text-gray-700">
@@ -156,21 +224,31 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
         <div className="relative">
           <input
             type="text"
+            ref={inputRef}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsDropdownOpen(true);
+            }}
+            onFocus={() => {
+              if (results.length > 0) {
+                setIsDropdownOpen(true);
+              }
+            }}
             placeholder="Search for a location in Berlin..."
             className="w-full h-11 px-4 rounded-lg bg-white border border-gray-200 pr-10 placeholder:text-gray-500 focus:border-brand-primary focus:ring-brand-primary shadow-lg"
           />
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         </div>
 
-        {results.length > 0 && (
+        {isDropdownOpen && results.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg max-h-60 overflow-auto border border-gray-200">
             {results.map((result, index) => (
               <button
                 key={index}
                 onClick={() => handleSelect(result)}
-                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-2 transition-colors"
+                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-2 transition-colors relative z-[1001]"
+                onMouseDown={(e) => e.preventDefault()} // Prevent input blur
               >
                 <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                 <span className="text-sm">{result.label}</span>
@@ -194,68 +272,195 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   );
 }
 
+function validateDoorNumber(value: string) {
+  // Don't show error for empty value - let HTML5 validation handle required state
+  if (!value) {
+    return { isValid: true, message: '' };
+  }
+  
+  // Check for invalid characters
+  if (/[^A-Za-z0-9/-]/.test(value)) {
+    return {
+      isValid: false,
+      message: 'Only letters, numbers, hyphens (-) and forward slashes (/) are allowed'
+    };
+  }
+
+  // Check length
+  if (value.length > 10) {
+    return {
+      isValid: false,
+      message: 'Door/Flat number cannot exceed 10 characters'
+    };
+  }
+
+  // Check for consecutive special characters
+  if (/[-]{2,}|[/]{2,}/.test(value)) {
+    return {
+      isValid: false,
+      message: 'Cannot use consecutive hyphens or slashes'
+    };
+  }
+
+  // Check if it starts or ends with a special character
+  if (/^[-/]|[-/]$/.test(value)) {
+    return {
+      isValid: false,
+      message: 'Cannot start or end with a hyphen or slash'
+    };
+  }
+  
+  return { isValid: true, message: '' };
+}
+
 export function LocationDetails({ formData, setFormData }: LocationDetailsProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-900">Restaurant Location</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+        {/* First Row - Door No. and Street */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-1">
+            <RequiredLabel>Door/Flat No.</RequiredLabel>
+            <Input
+              pattern="[A-Za-z0-9/-]+"
+              value={formData.address.doorNumber || ''}
+              onChange={async (e) => {
+                const value = e.target.value;
+                const validation = validateDoorNumber(value);
+                
+                // Check for invalid characters immediately
+                if (/[^A-Za-z0-9/-]/.test(value)) {
+                  e.target.setCustomValidity('Only letters, numbers, hyphens (-) and forward slashes (/) are allowed');
+                  return;
+                }
+                
+                // Validate the complete value
+                if (!validation.isValid) {
+                  e.target.setCustomValidity(validation.message);
+                } else {
+                  e.target.setCustomValidity('');
+                  setFormData({
+                    ...formData,
+                    address: { ...formData.address, doorNumber: value }
+                  });
+                }
+              }}
+              onInvalid={(e: React.InvalidEvent<HTMLInputElement>) => {
+                const value = e.target.value;
+                if (!value) {
+                  // Let HTML5 handle the required message
+                  e.target.setCustomValidity('');
+                } else {
+                  const validation = validateDoorNumber(value);
+                  e.target.setCustomValidity(validation.message || '');
+                }
+              }}
+              placeholder="e.g., 42A"
+              className="h-11"
+              maxLength={10}
+              title="Letters, numbers, hyphens (-) and forward slashes (/) only. Cannot start/end with special characters."
+              required
+              error={formData.address.doorNumber ? validateDoorNumber(formData.address.doorNumber).message : undefined}
+            />
+          </div>
+          <div className="md:col-span-3">
+            <RequiredLabel>Street</RequiredLabel>
+            <Input
+              value={formData.address.street || ''}
+              onChange={(e) => setFormData({
+                ...formData,
+                address: { ...formData.address, street: e.target.value }
+              })}
+              placeholder="Enter street name"
+              className="h-11"
+              required
+            />
+          </div>
+        </div>
+
+        {/* Second Row - Area */}
         <div>
-          <RequiredLabel>Street</RequiredLabel>
+          <RequiredLabel>Area</RequiredLabel>
           <Input
-            value={formData.address.street}
-            onChange={(e) => setFormData({
-              ...formData,
-              address: { ...formData.address, street: e.target.value }
-            })}
-            placeholder="Enter street name"
+            pattern="[A-Za-z0-9\s\-\.]+"
+            value={formData.address.area || ''}
+            onChange={async (e) => {
+              const value = e.target.value;
+              
+              // Check for invalid characters immediately
+              if (/[^A-Za-z0-9\s\-\.]/.test(value)) {
+                e.target.setCustomValidity('Only letters, numbers, spaces, hyphens (-) and periods (.) are allowed');
+                return;
+              }
+              
+              // Clear any previous validation message
+              e.target.setCustomValidity('');
+              
+              // Update the form data
+              setFormData({
+                ...formData,
+                address: { 
+                  ...formData.address, 
+                  area: value 
+                }
+              });
+              
+              // Validate after updating
+              const validation = validateArea(value);
+              if (!validation.isValid && validation.message) {
+                e.target.setCustomValidity(validation.message);
+              }
+            }}
+            onInvalid={(e: React.InvalidEvent<HTMLInputElement>) => {
+              const value = e.target.value;
+              if (!value) {
+                // Let HTML5 handle the required message
+                e.target.setCustomValidity('');
+              } else {
+                const validation = validateArea(value);
+                e.target.setCustomValidity(validation.message || '');
+              }
+            }}
+            placeholder="Enter area or neighborhood (e.g., Mitte, Kreuzberg)"
             className="h-11"
+            maxLength={50}
+            title="Letters, numbers, spaces, hyphens (-) and periods (.) only. Cannot start/end with special characters."
             required
+            error={formData.address.area ? validateArea(formData.address.area).message : undefined}
           />
         </div>
-        <div>
-          <RequiredLabel>Street Number</RequiredLabel>
-          <Input
-            value={formData.address.number}
-            onChange={(e) => setFormData({
-              ...formData,
-              address: { ...formData.address, number: e.target.value }
-            })}
-            placeholder="Enter street number"
-            className="h-11"
-            required
-          />
-        </div>
-        <div>
-          <RequiredLabel>City</RequiredLabel>
-          <Input
-            value={formData.address.city}
-            onChange={(e) => setFormData({
-              ...formData,
-              address: { ...formData.address, city: e.target.value }
-            })}
-            placeholder="Enter city"
-            className="h-11"
-            required
-          />
-        </div>
-        <div>
-          <RequiredLabel>Postal Code</RequiredLabel>
-          <Input
-            pattern="[0-9]{5}"
-            maxLength={5}
-            value={formData.address.postalCode}
-            onChange={(e) => setFormData({
-              ...formData,
-              address: { ...formData.address, postalCode: e.target.value }
-            })}
-            placeholder="Enter postal code (e.g., 10115)"
-            className="h-11"
-            required
-          />
+
+        {/* Third Row - City and Postal Code */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <RequiredLabel>City</RequiredLabel>
+            <Input
+              value="Berlin"
+              disabled
+              className="h-11 bg-gray-50 cursor-not-allowed"
+              required
+            />
+          </div>
+          <div>
+            <RequiredLabel>Postal Code</RequiredLabel>
+            <Input
+              pattern="[0-9]{5}"
+              maxLength={5}
+              value={formData.address.postalCode || ''}
+              onChange={(e) => setFormData({
+                ...formData,
+                address: { ...formData.address, postalCode: e.target.value }
+              })}
+              placeholder="e.g., 10115"
+              className="h-11"
+              required
+            />
+          </div>
         </div>
       </div>
 
-      <div className="mt-6">
+      <div>
         <RequiredLabel>Confirm Location on Map</RequiredLabel>
         <p className="text-sm text-gray-600 mb-2">
           Please select a location within Berlin city limits (highlighted area)
@@ -266,7 +471,9 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
             zoom={13}
             style={{ height: '100%', width: '100%', zIndex: 1 }}
             scrollWheelZoom={true}
-          >
+            zoomControl={false} // Disable default zoom control
+          > 
+            <ZoomControl />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -303,4 +510,3 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
     </div>
   );
 }
-              

@@ -1,10 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, X } from 'lucide-react';
 import { Button } from './Button';
+import { useNavigate } from 'react-router-dom';
 
 interface SuccessDialogProps {
   isOpen: boolean;
-  onClose: () => void;
   onGoHome: () => void;
   title?: string;
   message?: string;
@@ -12,11 +12,16 @@ interface SuccessDialogProps {
 
 export function SuccessDialog({
   isOpen,
-  onClose,
   onGoHome,
   title = 'Application Submitted!',
   message = 'Thank you for your application. Our team will review it within 4-5 business days. We\'ll notify you once the review is complete.'
 }: SuccessDialogProps) {
+  const navigate = useNavigate();
+
+  const handleClose = () => {
+    navigate('/dashboard');
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -27,7 +32,7 @@ export function SuccessDialog({
             animate={{ opacity: 0.4 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black z-40"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           {/* Dialog */}
@@ -40,7 +45,7 @@ export function SuccessDialog({
           >
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full relative">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
               >
                 <X className="w-5 h-5" />

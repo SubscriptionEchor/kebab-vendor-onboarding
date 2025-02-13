@@ -30,9 +30,28 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const location = useLocation();
   const { application, updateApplication, submitApplication } = useRestaurantApplication();
   const isResubmission = new URLSearchParams(location.search).has('edit');
+
+  // Clear documents from localStorage when component mounts for new applications
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const isNewApplication = !searchParams.has('edit');
+    
+    if (isNewApplication) {
+      localStorage.removeItem('restaurantDocuments');
+      setDocuments({
+        hospitalityLicense: [],
+        registrationCertificate: [],
+        bankDocument: [],
+        taxDocument: [],
+        idCards: [],
+      });
+    }
+  }, []);
 
   // Initialize documents state from application
   useEffect(() => {
@@ -68,6 +87,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       });
 
       console.log('Initialized documents state:', documents);
+      setIsInitialized(true);
       // Initialize bank details
       const { bankDetails: existingBankDetails } = businessDocuments;
       if (existingBankDetails) {
@@ -109,66 +129,88 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    setIsValidating(true);
     setIsSubmitting(true);
+    
+    // Don't validate if component hasn't finished initializing
+    if (!isInitialized) {
+      console.log('Component not fully initialized, waiting...');
+      setIsSubmitting(false);
+      setIsValidating(false);
+      return;
+    }
+    
     setErrors([]);
     
     console.log('Starting form submission with documents:', documents);
+    console.log('Current application state:', application);
     
     const searchParams = new URLSearchParams(location.search);
     const applicationId = searchParams.get('edit');
     
-    // Validate all required fields first
-    const validationErrors = [];
-    
-    if (!documents.hospitalityLicense?.length) {
-      validationErrors.push('Hospitality License is required');
-    }
-    if (!documents.registrationCertificate?.length) {
-      validationErrors.push('Registration Certificate is required');
-    }
-    if (!documents.taxDocument?.length) {
-      validationErrors.push('Tax Document is required');
-    }
-    if (!documents.idCards?.length || documents.idCards.length < 2) {
-      validationErrors.push('Please upload both front and back sides of your ID card');
-    }
-
-    if (validationErrors.length > 0) {
-      setErrors(validationErrors);
-      setIsSubmitting(false);
-      return;
-    }
+    // Wait for documents to be saved to context
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
-      // Format phone numbers to international format
-      const formatPhoneNumber = (phone: string, countryCode: string) => {
-        const cleanPhone = phone.replace(/\D/g, '');
-        const normalizedPhone = cleanPhone.replace(/^0+/, '');
-        return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
-      };
+      const validationErrors = [];
+    
+      // Log current state for debugging
+      console.log('Current documents state:', documents);
+      console.log('Current application state:', application);
+
+      // Log current state for debugging
+      console.log('Current documents state:', documents);
+      console.log('Current application state:', application);
+
+      // Document validations
+      if (!documents.hospitalityLicense?.length) {
+        validationErrors.push('Hospitality License is required');
+      }
+      if (!documents.registrationCertificate?.length) {
+        validationErrors.push('Registration Certificate is required');
+      }
+      if (!documents.taxDocument?.length) {
+        validationErrors.push('Tax Document is required');
+      }
+      if (!documents.idCards?.length || documents.idCards.length < 2) {
+        validationErrors.push('Please upload both front and back sides of your ID card');
+      }
+
+      if (validationErrors.length > 0) {
+        console.log('Validation errors found:', validationErrors);
+        setErrors(validationErrors);
+        setIsSubmitting(false);
+        setIsValidating(false);
+        showToast('Please complete all required documents before submitting', 'error');
+        return;
+      }
+
+      setIsValidating(false);
 
       // Prepare application data with proper formatting
       const applicationData = {
-        beneficialOwners: (application?.beneficialOwners || []).map(owner => ({
-          ...owner,
-          idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : []
-        })),
-        // Ensure location and coordinates are included
-        location: {
-          coordinates: {
-            type: 'Point',
-            coordinates: [
-              parseFloat(application.location.coordinates.coordinates[0].toFixed(6)),
-              parseFloat(application.location.coordinates.coordinates[1].toFixed(6))
-            ]
-          },
-          address: application.location.address
-        },
         companyName: application.companyName,
         restaurantName: application.restaurantName,
         restaurantContactInfo: {
           email: application.restaurantContactInfo.email,
-          phone: application.restaurantContactInfo.phone
+          phone: application.restaurantContactInfo.phone,
+          countryCode: application.restaurantContactInfo.countryCode
+        },
+        beneficialOwners: (application?.beneficialOwners || []).map(owner => {
+          return {
+            ...owner,
+            idCardDocuments: owner.isPrimary ? documents.idCards.map(doc => doc.key) : []
+          };
+        }),
+        location: {
+          coordinates: {
+            type: 'Point',
+            coordinates: [
+              application.location.coordinates.coordinates[0],
+              application.location.coordinates.coordinates[1]
+            ]
+          },
+          address: application.location.address
         },
         restaurantImages: application.restaurantImages,
         menuImages: application.menuImages,
@@ -176,30 +218,24 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
         cuisines: application.cuisines,
         openingTimes: application.openingTimes,
         businessDocuments: {
-          hospitalityLicense: documents.hospitalityLicense[0]?.key,
-          registrationCertificate: documents.registrationCertificate[0]?.key,
+          hospitalityLicense: documents.hospitalityLicense[0]?.key || '',
+          registrationCertificate: documents.registrationCertificate[0]?.key || '',
+          bankDetails: {
+            ...application.businessDocuments.bankDetails,
+            documentUrl: documents.bankDocument[0]?.key || ''
+          },
           taxId: {
             documentNumber: bankDetails.bankIdentifierCode || 'default',
-            documentUrl: documents.taxDocument[0]?.key
-          },
-          bankDetails: {
-            bankName: bankDetails.bankName,
-            accountHolderName: bankDetails.accountHolderName,
-            accountNumber: bankDetails.accountNumber,
-            branchName: bankDetails.branchName,
-            bankIdentifierCode: bankDetails.bankIdentifierCode,
-            documentUrl: documents.bankDocument[0]?.key || ''
+            documentUrl: documents.taxDocument[0]?.key || ''
           }
         }
       };
 
       // Log the application data for debugging
       console.log('Final application data:', {
-        ...applicationData,
-        beneficialOwners: applicationData.beneficialOwners.map(owner => ({
-          ...owner,
-          idCardDocuments: owner.idCardDocuments
-        }))
+        applicationData,
+        documents,
+        bankDetails
       });
 
       // Update application state
@@ -222,16 +258,17 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       }
 
       setShowSuccess(true);
-      clearApplicationData(); // Clear data after successful submission
+      // Only clear data after dialog is closed
+      // clearApplicationData() will be called in handleGoHome
 
     } catch (error) {
       console.error('Submission failed:', error);
       if (error instanceof Error) {
-        showToast(error.message, 'error');
         setErrors([error.message]);
+        showToast(error.message, 'error');
       } else {
-        showToast('Failed to submit application. Please try again.', 'error');
         setErrors(['An unexpected error occurred. Please try again.']);
+        showToast('Failed to submit application. Please try again.', 'error');
       }
     } finally {
       setIsSubmitting(false);
@@ -323,12 +360,24 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   // Load documents from localStorage on mount
   useEffect(() => {
     const savedDocuments = localStorage.getItem('restaurantDocuments');
-    if (savedDocuments) {
+    const searchParams = new URLSearchParams(location.search);
+    const isEditing = searchParams.has('edit');
+    
+    // Only load saved documents if we're editing an application
+    if (savedDocuments && isEditing) {
       try {
         const parsedDocuments = JSON.parse(savedDocuments);
         setDocuments(parsedDocuments);
       } catch (error) {
         console.error('Failed to parse saved documents:', error);
+        // Reset documents state on error
+        setDocuments({
+          hospitalityLicense: [],
+          registrationCertificate: [],
+          bankDocument: [],
+          taxDocument: [],
+          idCards: [],
+        });
       }
     }
   }, []);
@@ -434,12 +483,17 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           type="button"
           variant="outline"
           size="lg"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isValidating}
           onClick={onBack}
         >
           Previous Step
         </Button>
-        <Button type="submit" size="lg" isLoading={isSubmitting}>
+        <Button 
+          type="submit" 
+          size="lg" 
+          isLoading={isSubmitting || isValidating}
+          disabled={isSubmitting || isValidating}
+        >
           {isResubmission ? 'Resubmit Application' : 'Submit Application'}
         </Button>
       </div>

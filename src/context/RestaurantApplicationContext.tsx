@@ -88,13 +88,22 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     // Only load saved data if we're editing an existing application
     const searchParams = new URLSearchParams(window.location.search);
     const isEditing = searchParams.has('edit');
+    const isNewApplication = window.location.pathname === '/restaurants/new' && !isEditing;
 
     try {
+      // Clear saved data for new applications
+      if (isNewApplication) {
+        localStorage.removeItem('restaurantApplication');
+        localStorage.removeItem('restaurantDocuments');
+        localStorage.removeItem('cachedCuisines');
+        sessionStorage.removeItem('currentStep');
+        return defaultApplication;
+      }
+
       if (isEditing) {
         const savedData = localStorage.getItem('restaurantApplication');
         return savedData ? JSON.parse(savedData) : defaultApplication;
       }
-      // For new applications, start fresh
       return defaultApplication;
     } catch (error) {
       console.error('Failed to load saved application:', error);
@@ -208,7 +217,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     if (!application) {
       console.error('No application data to submit');
       showToast('Please fill in all required information before submitting.', 'error');
-      return;
+      return Promise.reject(new Error('Please fill in all required information before submitting.'));
     }
     
     // Check if this is a new application or resubmission
@@ -218,8 +227,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     if (isResubmission) {
       const applicationId = searchParams.get('edit');
       if (!applicationId) {
-        showToast('Invalid application ID for resubmission', 'error');
-        return;
+        throw new Error('Invalid application ID for resubmission');
       }
       // For resubmission, use the resubmitApplication function
       return resubmitApplication(applicationId, application);
@@ -228,9 +236,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     const token = localStorage.getItem('authToken');
     if (!token) {
       console.error('Authentication token not found');
-      showToast('Your session has expired. Please log in again.', 'error');
-      window.location.href = '/login';
-      return;
+      throw new Error('Your session has expired. Please log in again.');
     }
 
     // Validate required fields
@@ -257,8 +263,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
 
     console.log('Checking required fields:', missingFields);
     if (missingFields.length > 0) {
-      showToast(`Please complete all required fields: ${missingFields.join(', ')}`, 'error');
-      return;
+      throw new Error(`Please complete all required fields: ${missingFields.join(', ')}`);
     }
 
     console.log('Submitting application:', application);
@@ -337,14 +342,24 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       }
 
       // Helper function to format address
-      function formatAddress(address: string, countryCode: string): string {
-        const parts = address.split(',').map(part => part.trim());
+      function formatAddress(address: any, countryCode: string): string {
+        if (typeof address === 'string') {
+          // Handle legacy string format
+          const parts = address.split(',').map(part => part.trim());
+          if (countryCode === 'IN') {
+            const [street = '', city = '', state = '', country = 'India', postalCode = ''] = parts;
+            return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
+          } else {
+            const [street = '', city = 'Berlin', state = 'Berlin', country = 'Germany', postalCode = ''] = parts;
+            return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
+          }
+        }
+
+        // Handle new object format
         if (countryCode === 'IN') {
-          const [street = '', city = '', state = '', country = 'India', postalCode = ''] = parts;
-          return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
+          return `${address.doorNumber} ${address.street}, ${address.area}, ${address.city}, India, ${address.postalCode}`;
         } else {
-          const [street = '', city = 'Berlin', state = 'Berlin', country = 'Germany', postalCode = ''] = parts;
-          return `${street}, ${city}, ${state}, ${country}, ${postalCode}`;
+          return `${address.doorNumber} ${address.street}, ${address.area}, ${address.city}, Germany, ${address.postalCode}`;
         }
       }
 
@@ -377,31 +392,14 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       showToast('Application submitted successfully!', 'success');
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
-      console.error('Submission failed:', error instanceof Error ? error.message : 'Unknown error');
-      let errorMessage = 'Failed to submit application. ';
-      
+      console.error('Submission failed:', error);
       if (error instanceof Error) {
-        console.error('Submission error details:', {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        });
-        if (error.message.includes('validation')) {
-          errorMessage += 'Please check all required fields are filled correctly.';
-        } else if (error.message.includes('401')) {
-          errorMessage = 'Your session has expired. Please log in again.';
-          window.location.href = '/login';
-        } else if (error.message.includes('unauthorized')) {
-          errorMessage = 'Your session has expired. Please log in again.';
-          window.location.href = '/login';
-        } else {
-          errorMessage += error.message;
-        }
-      } else {
-        errorMessage += 'An unexpected error occurred.';
+        showToast(error.message, 'error');
+        throw error;
       }
+      const errorMessage = 'Failed to submit application. Please try again.';
       showToast(errorMessage, 'error');
-      return null;
+      throw new Error(errorMessage);
     }
   };
 

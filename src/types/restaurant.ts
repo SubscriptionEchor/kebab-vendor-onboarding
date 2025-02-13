@@ -33,8 +33,9 @@ export interface RestaurantLocation {
 }
 
 export interface RestaurantAddress {
+  doorNumber: string;
   street: string;
-  number: string;
+  area: string;
   city: string;
   postalCode: string;
   country: string;

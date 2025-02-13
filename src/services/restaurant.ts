@@ -151,8 +151,9 @@ export interface CreateRestaurantInput {
   email: string;
   phone: string;
   address: {
+    doorNumber: string;
     street: string;
-    number: string;
+    area: string;
     city: string;
     postalCode: string;
     country: string;

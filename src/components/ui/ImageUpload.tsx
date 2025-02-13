@@ -1,13 +1,11 @@
 import { useState, useRef } from "react";
-import { Upload, X, Image as ImageIcon, FileText } from "lucide-react";
+import { Upload, X, FileText, AlertCircle, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useToast } from "../../context/ToastContext";
-import { useFileUpload } from "../../hooks/useFileUpload";
-import {
-  FILE_SIZE_LIMITS,
-  ALLOWED_FILE_TYPES,
-} from "../../constants/fileUpload";
-import { ErrorAlert } from "./ErrorAlert";
+import { useToast } from "../../context/ToastContext"; 
+import { ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from "../../constants/fileUpload"; 
+import { ErrorAlert } from "./ErrorAlert"; 
+import { handleFileUpload } from "../../services/upload";
+import type { ImageType } from '../../types/upload';
 
 interface ImageUploadProps {
   label: string;
@@ -15,6 +13,8 @@ interface ImageUploadProps {
   images: { key: string; previewUrl: string }[];
   onImagesChange: (images: { key: string; previewUrl: string }[]) => void;
   acceptDocuments?: boolean;
+  imageType?: 'PROFILE_IMAGE' | 'RESTAURANT_IMAGE' | 'MENU_IMAGE';
+  imageType?: ImageType;
   required?: boolean;
   className?: string;
 }
@@ -25,37 +25,53 @@ export function ImageUpload({
   images,
   onImagesChange,
   acceptDocuments = false,
+  imageType = 'RESTAURANT_IMAGE',
   required,
   className = "",
 }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showRequirements, setShowRequirements] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState<Record<string, number>>({});
   const { showToast } = useToast();
 
-  const { upload, isUploading, progress, error } = useFileUpload({
-    validationOptions: {
-      maxSize: FILE_SIZE_LIMITS.RESTAURANT_IMAGE,
-      allowedTypes: acceptDocuments
-        ? ALLOWED_FILE_TYPES.DOCUMENTS
-        : ALLOWED_FILE_TYPES.IMAGES,
-      // Only apply dimension restrictions for images
-      ...(acceptDocuments
-        ? {}
-        : {
-            minWidth: 800,
-            minHeight: 600,
-          }),
-    },
-    maxFiles: maxImages,
-    onSuccess: (urls) => {
-      onImagesChange([...images, ...urls]);
-      setUploadError(null);
-    },
-    onError: (error) => {
-      setUploadError(error.message);
-      showToast(error.message, 'error');
-    },
+  // Get validation requirements based on image type
+  const getRequirements = () => {
+    if (acceptDocuments) {
+      return {
+        maxSize: '15MB',
+        types: 'PDF, JPEG, PNG',
+        dimensions: null
+      };
+    }
+
+    const config = imageType ? FILE_SIZE_LIMITS[imageType] : FILE_SIZE_LIMITS.RESTAURANT_IMAGE;
+    return {
+      maxSize: `${config.maxSize / (1024 * 1024)}MB`,
+      types: 'JPEG, PNG, WebP',
+      dimensions: `${config.minWidth}x${config.minHeight}px minimum`
+    };
+  };
+
+  const requirements = getRequirements();
+
+  console.log('ImageUpload props:', {
+    label,
+    maxImages,
+    imageType,
+    acceptDocuments,
+    images: images.length,
+    required
+  });
+
+  // Log validation options
+  console.log('Validation options:', {
+    maxSize: acceptDocuments ? FILE_SIZE_LIMITS.DOCUMENT : (imageType ? FILE_SIZE_LIMITS[imageType].maxSize : FILE_SIZE_LIMITS.RESTAURANT_IMAGE.maxSize),
+    allowedTypes: acceptDocuments ? ALLOWED_FILE_TYPES.DOCUMENTS : ALLOWED_FILE_TYPES.IMAGES,
+    imageType,
+    acceptDocuments
   });
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,14 +82,34 @@ export function ImageUpload({
       return;
     }
 
+    setIsUploading(true);
     try {
-      await upload(files);
+      const uploadedFiles = [];
+      for (const file of files) {
+        try {
+          const result = await handleFileUpload(file, (progress) => {
+            setProgress(prev => ({
+              ...prev,
+              [file.name]: progress
+            }));
+          });
+          uploadedFiles.push(result);
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          throw error;
+        }
+      }
+      onImagesChange([...images, ...uploadedFiles]);
+      setUploadError(null);
     } catch (error) {
       console.error("Failed to upload files:", error);
       if (error instanceof Error) {
         setUploadError(error.message);
         showToast(error.message, 'error');
       }
+    } finally {
+      setIsUploading(false);
+      setProgress({});
     }
   };
 
@@ -88,14 +124,34 @@ export function ImageUpload({
       return;
     }
 
+    setIsUploading(true);
     try {
-      await upload(files);
+      const uploadedFiles = [];
+      for (const file of files) {
+        try {
+          const result = await handleFileUpload(file, (progress) => {
+            setProgress(prev => ({
+              ...prev,
+              [file.name]: progress
+            }));
+          });
+          uploadedFiles.push(result);
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          throw error;
+        }
+      }
+      onImagesChange([...images, ...uploadedFiles]);
+      setUploadError(null);
     } catch (error) {
       console.error("Failed to upload files:", error);
       setUploadError(
         error instanceof Error ? error.message : "Failed to upload files"
       );
       showToast(error instanceof Error ? error.message : "Failed to upload files", 'error');
+    } finally {
+      setIsUploading(false);
+      setProgress({});
     }
   };
 
@@ -107,13 +163,53 @@ export function ImageUpload({
     <div className={className}>
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {label} {required && <span className="text-red-500">*</span>}
+        <button
+          type="button"
+          onClick={() => setShowRequirements(!showRequirements)}
+          className="ml-2 text-gray-400 hover:text-gray-600"
+        >
+          <Info className="w-4 h-4 inline-block" />
+        </button>
       </label>
 
+      {/* Image Requirements */}
+      <AnimatePresence>
+        {showRequirements && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200"
+          >
+            <h4 className="font-medium text-gray-900 mb-2">Image Requirements:</h4>
+            <ul className="space-y-1 text-sm text-gray-600">
+              <li>• Maximum file size: {requirements.maxSize}</li>
+              <li>• Allowed formats: {requirements.types}</li>
+              {requirements.dimensions && (
+                <li>• Dimensions: {requirements.dimensions}</li>
+              )}
+              {maxImages > 1 ? (
+                <li>• Number of files: {images.length} of {maxImages} maximum</li>
+              ) : (
+                <li>• Single file upload only</li>
+              )}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {uploadError && (
-        <ErrorAlert
-          message={uploadError}
-          onClose={() => setUploadError(null)}
-        />
+        <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
+          <div className="flex gap-2">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-800">{uploadError}</p>
+              <p className="text-sm text-red-600 mt-1">
+                Please ensure your file meets the requirements above.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       <div
@@ -146,12 +242,17 @@ export function ImageUpload({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="relative aspect-square rounded-lg overflow-hidden group"
+                className="relative aspect-square rounded-lg overflow-hidden group border border-gray-200"
               >
                 {typeof image?.previewUrl === "string" &&
                 image.previewUrl.endsWith(".pdf") ? (
-                  <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                    <FileText className="w-12 h-12 text-gray-400" />
+                  <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center p-4">
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <FileText className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-600 text-center mb-2 line-clamp-1">
+                      {image.key.split('/').pop()}
+                    </p>
                   </div>
                 ) : (
                   <img
@@ -163,9 +264,9 @@ export function ImageUpload({
                 <button
                   type="button"
                   onClick={() => removeImage(index)}
-                  className="absolute top-2 right-2 p-1 bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-2 right-2 p-1.5 bg-white/90 backdrop-blur-sm shadow-md rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
                 >
-                  <X className="w-4 h-4 text-gray-600" />
+                  <X className="w-4 h-4 text-red-500" />
                 </button>
               </motion.div>
             ))}

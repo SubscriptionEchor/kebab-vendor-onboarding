@@ -1,6 +1,8 @@
 import { Input } from '../../../../components/ui/Input';
 import { RequiredLabel } from '../RestaurantInfoStep';
 import PhoneInput from '../../../../components/ui/PhoneInput';
+import { useState } from 'react';
+import { validateEmail } from '../../../../utils/validation';
 
 interface RestaurantDetailsProps {
   formData: {
@@ -13,6 +15,35 @@ interface RestaurantDetailsProps {
 }
 
 export function RestaurantDetails({ formData, setFormData }: RestaurantDetailsProps) {
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [showEmailError, setShowEmailError] = useState(false);
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const email = e.target.value;
+    setFormData({ ...formData, restaurantEmail: email });
+
+    // Clear previous error
+    setEmailError(null);
+    setShowEmailError(false);
+
+    // Don't validate empty email (let HTML5 validation handle required state)
+    if (!email) return;
+
+    // Check for valid email format
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      setShowEmailError(true);
+      return;
+    }
+
+    // Check for business domain
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (domain && !domain.includes('.')) {
+      setEmailError('Please enter a valid email domain');
+      setShowEmailError(true);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-900">Restaurant Details</h2>
@@ -32,9 +63,17 @@ export function RestaurantDetails({ formData, setFormData }: RestaurantDetailsPr
           <Input
             type="email"
             value={formData.restaurantEmail}
-            onChange={(e) => setFormData({ ...formData, restaurantEmail: e.target.value })}
+            onChange={handleEmailChange}
+            onBlur={(e) => {
+              if (!e.target.value) return;
+              if (!validateEmail(e.target.value)) {
+                setEmailError('Invalid email format');
+                setShowEmailError(true);
+              }
+            }}
             placeholder="Enter restaurant email"
             className="h-11"
+            error={showEmailError ? emailError : undefined}
             required
           />
         </div>

@@ -1,3 +1,5 @@
+export type ImageType = 'PROFILE_IMAGE' | 'RESTAURANT_IMAGE' | 'MENU_IMAGE';
+
 // File size limits in bytes
 export const FILE_SIZE_LIMITS = {
   PROFILE_IMAGE: 5 * 1024 * 1024,    // 5MB

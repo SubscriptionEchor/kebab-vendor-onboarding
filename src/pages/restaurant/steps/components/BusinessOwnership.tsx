@@ -6,6 +6,8 @@ import { Button } from '../../../../components/ui/Button';
 import PhoneInput from '../../../../components/ui/PhoneInput';
 import { RequiredLabel } from '../RestaurantInfoStep';
 
+import { validateFirstName, validateLastName, validatePassportId } from '../../../../utils/validation';
+
 interface BusinessOwnershipProps {
   formData: {
     ownerName: string;
@@ -26,6 +28,9 @@ export function BusinessOwnership({
   additionalOwners,
   setAdditionalOwners
 }: BusinessOwnershipProps) {
+  const [ownerErrors, setOwnerErrors] = useState<Record<string, { firstName?: string; lastName?: string; passportId?: string }>>({});
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
   const addOwner = () => {
     if (additionalOwners.length >= 6) return; // Maximum 7 owners (primary + 6 additional)
 
@@ -53,6 +58,36 @@ export function BusinessOwnership({
         owner.id === id ? { ...owner, [field]: value } : owner
       )
     );
+  };
+
+  const handlePassportChange = (id: string, value: string) => {
+    const upperValue = value.toUpperCase();
+    
+    // Clear previous error
+    setOwnerErrors(prev => ({
+      ...prev,
+      [id]: { ...prev[id], passportId: undefined }
+    }));
+    
+    // Check format while typing
+    if (upperValue && !/^[A-Z]?\d*$/.test(upperValue)) {
+      setOwnerErrors(prev => ({
+        ...prev,
+        [id]: { ...prev[id], passportId: 'Must start with a letter followed by numbers only' }
+      }));
+      return;
+    }
+    
+    // Update the value
+    updateOwner(id, 'passportId', upperValue);
+    
+    // Validate complete passport ID
+    if (upperValue && !validatePassportId(upperValue)) {
+      setOwnerErrors(prev => ({
+        ...prev,
+        [id]: { ...prev[id], passportId: 'Format: 1 letter followed by 8 numbers (e.g., A12345678)' }
+      }));
+    }
   };
 
   return (
@@ -118,31 +153,69 @@ export function BusinessOwnership({
                   <div>
                     <RequiredLabel>First Name</RequiredLabel>
                     <Input
+                      pattern="[A-Za-z]+"
                       value={owner.firstName}
-                      onChange={(e) => updateOwner(owner.id, 'firstName', e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/[^A-Za-z]/.test(value)) {
+                          setValidationErrors(prev => [...prev, 'Only letters are allowed in first name']);
+                          setOwnerErrors(prev => ({ ...prev, [owner.id]: { ...prev[owner.id], firstName: 'Only letters allowed' } }));
+                          return;
+                        }
+                        setOwnerErrors(prev => ({
+                          ...prev,
+                          [owner.id]: { ...prev[owner.id], firstName: undefined }
+                        }));
+                        if (validateFirstName(value)) {
+                          updateOwner(owner.id, 'firstName', value);
+                        }
+                      }}
                       placeholder="Enter first name"
                       className="h-11"
                       required
+                      title="Only letters allowed (A-Z, a-z)"
+                      error={ownerErrors[owner.id]?.firstName}
                     />
                   </div>
                   <div>
                     <RequiredLabel>Last Name</RequiredLabel>
                     <Input
+                      pattern="[A-Za-z]+"
                       value={owner.lastName}
-                      onChange={(e) => updateOwner(owner.id, 'lastName', e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (/[^A-Za-z]/.test(value)) {
+                          setValidationErrors(prev => [...prev, 'Only letters are allowed in last name']);
+                          setOwnerErrors(prev => ({ ...prev, [owner.id]: { ...prev[owner.id], lastName: 'Only letters allowed' } }));
+                          return;
+                        }
+                        setOwnerErrors(prev => ({
+                          ...prev,
+                          [owner.id]: { ...prev[owner.id], lastName: undefined }
+                        }));
+                        if (validateLastName(value)) {
+                          updateOwner(owner.id, 'lastName', value);
+                        }
+                      }}
                       placeholder="Enter last name"
                       className="h-11"
                       required
+                      title="Only letters allowed (A-Z, a-z)"
+                      error={ownerErrors[owner.id]?.lastName}
                     />
                   </div>
                   <div>
                     <RequiredLabel>Passport ID</RequiredLabel>
                     <Input
+                      maxLength={9}
+                      pattern="[A-Z]\d{8}"
                       value={owner.passportId}
-                      onChange={(e) => updateOwner(owner.id, 'passportId', e.target.value)}
-                      placeholder="Enter passport number"
+                      onChange={(e) => handlePassportChange(owner.id, e.target.value)}
+                      placeholder="e.g., A12345678"
                       className="h-11"
                       required
+                      error={ownerErrors[owner.id]?.passportId}
+                      title="One letter followed by 8 numbers"
                     />
                   </div>
                   <div>

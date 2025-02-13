@@ -28,6 +28,7 @@ export function RequiredLabel({ children }: { children: React.ReactNode }) {
 
 export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   const { showToast } = useToast();
+  const { application, updateApplication } = useRestaurantApplication();
   const [formData, setFormData] = useState({
     companyName: '',
     restaurantName: '',
@@ -35,8 +36,9 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     restaurantPhone: '',
     restaurantCountryCode: 'DE',
     address: {
+      doorNumber: '',
       street: '',
-      number: '',
+      area: '',
       city: '',
       postalCode: '',
       country: 'Germany',
@@ -57,47 +59,47 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [additionalOwners, setAdditionalOwners] = useState<any[]>([]);
-  const { application, updateApplication } = useRestaurantApplication();
 
   // Initialize form data from application context
   useEffect(() => {
     if (application) {
-      // Handle address parsing safely
+      console.log('Initializing form data from application:', application);
+
+      // Extract address components
+      const address = typeof application.location?.address === 'object' 
+        ? application.location.address
+        : {
+            doorNumber: '',
+            street: '',
+            area: '',
+            city: 'Berlin',
+            postalCode: '',
+            country: 'Germany'
+          };
+      // Extract address components from the stored address
       let addressComponents = {
+        doorNumber: '',
         street: '',
-        number: '',
+        area: '',
         city: 'Berlin',
         postalCode: '',
         country: 'Germany'
       };
 
-      if (typeof application.location?.address === 'string') {
-        const addressParts = application.location.address.split(',').map(part => part.trim());
-        const [streetWithNumber = '', city = '', state = '', country = '', postalCode = ''] = addressParts;
-
-        // Split street and number if present
-        const streetMatch = streetWithNumber.match(/^(.*?)\s*(\d+\s*[A-Za-z]?)?$/);
-        if (streetMatch) {
-          const [, street = '', number = ''] = streetMatch;
-          addressComponents.street = street.trim();
-          addressComponents.number = number.trim();
-        } else {
-          addressComponents.street = streetWithNumber;
-        }
-
-        addressComponents.city = city || 'Berlin';
-        addressComponents.postalCode = postalCode || '';
-        addressComponents.country = country || 'Germany';
-      } else if (typeof application.location?.address === 'object') {
-        // If address is already an object, use its components
+      if (typeof application.location?.address === 'object') {
         addressComponents = {
+          doorNumber: application.location.address.doorNumber || '',
           street: application.location.address.street || '',
-          number: application.location.address.number || '',
+          area: application.location.address.area || '',
           city: application.location.address.city || 'Berlin',
           postalCode: application.location.address.postalCode || '',
           country: application.location.address.country || 'Germany'
         };
       }
+
+      // Get coordinates
+      const coordinates = application.location?.coordinates?.coordinates || [DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat];
+      const [lng, lat] = coordinates;
 
       setFormData(prev => ({
         ...prev,
@@ -107,8 +109,15 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         restaurantPhone: application.restaurantContactInfo?.phone || '',
         address: addressComponents,
         location: {
-          lat: application.location?.coordinates?.coordinates[1] || 52.520008,
-          lng: application.location?.coordinates?.coordinates[0] || 13.404954,
+          lat: lat || DEFAULT_LOCATION.lat,
+          lng: lng || DEFAULT_LOCATION.lng
+        }
+      }));
+      localStorage.setItem('restaurantFormData', JSON.stringify({
+        address: addressComponents,
+        location: {
+          lat: lat || DEFAULT_LOCATION.lat,
+          lng: lng || DEFAULT_LOCATION.lng
         }
       }));
 
@@ -145,16 +154,39 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     }
   }, [application]);
 
+  // Load saved form data from localStorage when component mounts
+  useEffect(() => {
+    const savedData = localStorage.getItem('restaurantFormData');
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        setFormData(prev => ({
+          ...prev,
+          ...parsedData
+        }));
+      } catch (error) {
+        console.error('Failed to parse saved form data:', error);
+      }
+    }
+  }, []);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationErrors([]);
+    
+    // Helper function to format phone numbers
+    const formatPhoneNumber = (phone: string, countryCode: string): string => {
+      // Remove any existing country code prefix and clean the number
+      const cleanPhone = phone.replace(/^\+\d{2}/, '').replace(/\D/g, '').replace(/^0+/, '');
+      return `+${countryCode === 'IN' ? '91' : '49'}${cleanPhone}`;
+    };
 
     try {
       // Format address according to backend expectations
       const formattedAddress = [
-        `${formData.address.street} ${formData.address.number}`.trim(),
+        formData.address.doorNumber,
+        formData.address.street,
+        formData.address.area,
         `${formData.address.postalCode} ${formData.address.city}`.trim(),
-        formData.address.city,
         formData.address.country
       ].filter(Boolean).join(', ');
 
@@ -181,7 +213,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         restaurantName: formData.restaurantName,
         restaurantContactInfo: {
           email: formData.restaurantEmail.trim(),
-          phone: formData.restaurantPhone ? formatPhoneNumber(formData.restaurantPhone, formData.restaurantCountryCode) : '',
+          phone: formData.restaurantPhone,
           countryCode: formData.restaurantCountryCode === 'DE' ? '49' : '91',
         },
         location: {
@@ -192,14 +224,21 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
               parseFloat(formData.location.lat.toFixed(6))
             ]
           },
-          address: formattedAddress.trim(),
+          address: {
+            doorNumber: formData.address.doorNumber,
+            street: formData.address.street,
+            area: formData.address.area,
+            city: formData.address.city,
+            postalCode: formData.address.postalCode,
+            country: formData.address.country
+          },
         },
         beneficialOwners: [
           {
             name: formData.ownerName,
             passportId: formData.passportId.trim(),
             email: formData.email.trim(),
-            phone: formatPhoneNumber(formData.phone, formData.countryCode),
+            phone: formData.phone,
             countryCode: formData.countryCode === 'DE' ? '49' : '91',
             isPrimary: true,
             idCardDocuments: [],

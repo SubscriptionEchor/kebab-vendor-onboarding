@@ -131,14 +131,15 @@ export function VerifyPhonePage() {
       let errorMessage = 'Verification failed. Please try again';
       
       if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase();
-        if (errorMessage.includes('invalid') || errorMessage.includes('incorrect')) {
+        const lowerCaseError = error.message.toLowerCase();
+        if (lowerCaseError.includes('invalid') || lowerCaseError.includes('incorrect')) {
           errorMessage = 'Invalid verification code. Please try again';
-        } else if (errorMessage.includes('expired')) {
+        } else if (lowerCaseError.includes('expired')) {
           errorMessage = 'Verification code has expired. Please request a new code';
           setTimer(0); // Enable resend button immediately
           inputRefs.current[0]?.focus(); // Focus first input for new code
         }
+        setErrors([errorMessage]);
       } else {
         setErrors(['An unexpected error occurred. Please try again']);
       }
