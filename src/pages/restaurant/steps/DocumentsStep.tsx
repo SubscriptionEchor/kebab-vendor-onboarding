@@ -61,7 +61,7 @@ const formatPhoneNumber = (phone: string, countryCode: string): string => {
   return phone.startsWith('+') ? phone : `+${countryCode === 'IN' ? '91' : '49'}${cleanPhone}`;
 };
 
-export function DocumentsStep({ onBack }: DocumentsStepProps) {
+function DocumentsStep({ onBack }: DocumentsStepProps) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [showSuccess, setShowSuccess] = useState(false);
@@ -95,12 +95,25 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     if (application?.businessDocuments) {
       console.log('[DocumentsStep] Initializing documents from application:', {
         businessDocuments: application.businessDocuments,
-        primaryOwner: application.beneficialOwners?.find(owner => owner.isPrimary)
+        primaryOwner: application.beneficialOwners?.find(owner => owner.isPrimary),
+        idCards: application.beneficialOwners?.find(owner => owner.isPrimary)?.idCardDocuments
       });
 
       const { businessDocuments } = application;
       const primaryOwner = application.beneficialOwners?.find(owner => owner.isPrimary);
       
+      // Initialize ID cards from primary owner
+      if (primaryOwner?.idCardDocuments?.length) {
+        console.log('[DocumentsStep] Setting ID cards:', primaryOwner.idCardDocuments);
+        setDocuments(prev => ({
+          ...prev,
+          idCards: primaryOwner.idCardDocuments.map(doc => ({
+            key: doc,
+            previewUrl: doc
+          }))
+        }));
+      }
+
       const initialDocuments = {
         hospitalityLicense: businessDocuments.hospitalityLicense ? [{
           key: businessDocuments.hospitalityLicense,
@@ -118,10 +131,6 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           key: businessDocuments.taxId.documentUrl,
           previewUrl: businessDocuments.taxId.documentUrl
         }] : [],
-        idCards: primaryOwner?.idCardDocuments?.map(doc => ({
-          key: doc,
-          previewUrl: doc
-        })) || []
       };
 
       console.log('[DocumentsStep] Setting initial documents:', initialDocuments);
@@ -170,12 +179,14 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    
     console.log('[DocumentsStep] Starting submission with documents:', {
       hospitalityLicense: documents.hospitalityLicense[0]?.key,
       registrationCertificate: documents.registrationCertificate[0]?.key,
       taxDocument: documents.taxDocument[0]?.key,
       idCards: documents.idCards.map(doc => doc.key)
     });
+
     setIsSubmitting(true);
     setErrors([]);
     
@@ -183,16 +194,30 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       // Validate document uploads first
       const documentValidationErrors = [];
       
-      if (!documents.hospitalityLicense[0]?.key) {
+      // Helper function to get document key
+      const getDocumentKey = (docs: Array<{ key: string; previewUrl: string }>) => {
+        if (!docs || !docs.length) return '';
+        return docs[0].key || '';
+      };
+
+      const hospitalityLicenseKey = getDocumentKey(documents.hospitalityLicense);
+      const registrationCertificateKey = getDocumentKey(documents.registrationCertificate);
+      const taxDocumentKey = getDocumentKey(documents.taxDocument);
+      const bankDocumentKey = getDocumentKey(documents.bankDocument);
+      const idCardKeys = documents.idCards
+        .map(doc => doc.key)
+        .filter(Boolean);
+
+      if (!hospitalityLicenseKey) {
         documentValidationErrors.push('Please upload a valid hospitality license');
       }
-      if (!documents.registrationCertificate[0]?.key) {
+      if (!registrationCertificateKey) {
         documentValidationErrors.push('Please upload a valid registration certificate');
       }
-      if (!documents.taxDocument[0]?.key) {
+      if (!taxDocumentKey) {
         documentValidationErrors.push('Please upload a valid tax document');
       }
-      if (documents.idCards.length < 2 || !documents.idCards.every(doc => doc.key)) {
+      if (idCardKeys.length < 2) {
         documentValidationErrors.push('Please upload both front and back sides of your ID card');
       }
       
@@ -216,21 +241,21 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
           }] : []
         })),
         businessDocuments: {
-          hospitalityLicense: documents.hospitalityLicense[0]?.key,
-          registrationCertificate: documents.registrationCertificate[0]?.key,
+          hospitalityLicense: documents.hospitalityLicense[0]?.key || '',
+          registrationCertificate: documents.registrationCertificate[0]?.key || '',
           bankDetails: {
             ...bankDetails,
-            documentUrl: documents.bankDocument[0]?.key
+            documentUrl: bankDocumentKey
           },
           taxId: {
             documentNumber: bankDetails.bankIdentifierCode || 'default',
-            documentUrl: documents.taxDocument[0]?.key
+            documentUrl: documents.taxDocument[0]?.key || ''
           }
         },
         beneficialOwners: application!.beneficialOwners.map(owner => ({
           ...owner,
           idCardDocuments: owner.isPrimary ? 
-            documents.idCards.map(doc => doc.key) : 
+            documents.idCards.map(doc => doc.key).filter(Boolean) : 
             []
         }))
       };
@@ -485,6 +510,7 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
       <BusinessDocuments
         documents={documents}
         setDocuments={setDocuments}
+        application={application}
       />
 
       <BankDetails
@@ -544,3 +570,5 @@ export function DocumentsStep({ onBack }: DocumentsStepProps) {
     </motion.form>
   );
 }
+
+export { DocumentsStep };

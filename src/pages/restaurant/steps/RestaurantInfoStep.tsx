@@ -43,9 +43,6 @@ const validateSnapshot = (snapshot: any): void => {
   if (!snapshot.restaurantContactInfo.phone) {
     errors.push('Restaurant phone is required');
   }
-  if (!snapshot.location.address) {
-    errors.push('Complete address is required');
-  }
   if (!snapshot.beneficialOwners.some(owner => owner.isPrimary)) {
     errors.push('Primary owner information is required');
   }
@@ -59,7 +56,7 @@ const validateSnapshot = (snapshot: any): void => {
 const formatPhoneNumber = (phone: string, countryCode: string): string => {
   // Remove any existing country code prefix and clean the number
   const cleanPhone = phone.replace(/^\+\d{2}/, '').replace(/\D/g, '').replace(/^0+/, '');
-  return `+${countryCode === 'IN' ? '91' : '49'}${cleanPhone}`;
+  return `+49${cleanPhone}`;
 };
 
 export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
@@ -71,10 +68,17 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     restaurantEmail: '',
     restaurantPhone: '',
     restaurantCountryCode: 'DE',
-    address: '',
+    address: {
+      doorNumber: '',
+      street: '',
+      area: '',
+      city: 'Berlin',
+      postalCode: '',
+      country: 'Germany'
+    },
     location: {
       lat: DEFAULT_LOCATION.lat,
-      lng: DEFAULT_LOCATION.lng,
+      lng: DEFAULT_LOCATION.lng
     },
     ownerName: '',
     passportId: '',
@@ -98,9 +102,13 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
       let address = '';
       if (application.location?.address) {
         // Handle both string and object address formats
-        address = typeof application.location.address === 'string' 
-          ? application.location.address.trim() 
-          : '';
+        if (typeof application.location.address === 'string') {
+          address = application.location.address.trim();
+        } else if (typeof application.location.address === 'object') {
+          address = Object.values(application.location.address)
+            .filter(Boolean)
+            .join(', ');
+        }
         console.log('Parsed address from application:', address);
       }
 
@@ -117,7 +125,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
         restaurantName: application.restaurantName || '',
         restaurantEmail: application.restaurantContactInfo?.email || '',
         restaurantPhone: application.restaurantContactInfo?.phone || '',
-        address: address,
+        address: address.endsWith(', Germany') ? address : `${address}, Germany`,
         location: {
           lat: lat || DEFAULT_LOCATION.lat,
           lng: lng || DEFAULT_LOCATION.lng

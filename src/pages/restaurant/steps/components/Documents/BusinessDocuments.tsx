@@ -1,6 +1,6 @@
 import { FileText } from 'lucide-react';
 import { ImageUpload } from '../../../../../components/ui/ImageUpload';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface BusinessDocumentsProps {
   documents: {
@@ -11,9 +11,83 @@ interface BusinessDocumentsProps {
     idCards: Array<{ key: string; previewUrl: string }>;
   };
   setDocuments: (documents: any) => void;
+  application?: {
+    businessDocuments?: {
+      hospitalityLicense?: string;
+      registrationCertificate?: string;
+      bankDetails?: {
+        documentUrl?: string;
+      };
+      taxId?: {
+        documentUrl?: string;
+      };
+    };
+    beneficialOwners?: Array<{
+      isPrimary?: boolean;
+      idCardDocuments?: string[];
+    }>;
+  };
 }
 
-export function BusinessDocuments({ documents, setDocuments }: BusinessDocumentsProps) {
+// Helper function to format document
+const formatDocument = (doc: string | null | undefined): Array<{ key: string; previewUrl: string }> => {
+  if (!doc) return [];
+  return [{
+    key: doc,
+    previewUrl: doc
+  }];
+};
+export function BusinessDocuments({ documents: initialDocuments, setDocuments, application }: BusinessDocumentsProps) {
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Log document state changes
+  useEffect(() => {
+    console.log('[BusinessDocuments] Current documents state:', initialDocuments);
+  }, [initialDocuments]);
+
+  // Initialize documents from application data
+  useEffect(() => {
+    if (application && !isInitialized) {
+      console.log('[BusinessDocuments] Initializing from application:', application);
+      
+      // Initialize business documents
+      const { businessDocuments } = application;
+      if (businessDocuments) {
+        console.log('[BusinessDocuments] Found business documents:', businessDocuments);
+        
+        setDocuments(prev => ({
+          ...prev,
+          hospitalityLicense: formatDocument(businessDocuments.hospitalityLicense),
+          registrationCertificate: formatDocument(businessDocuments.registrationCertificate),
+          bankDocument: formatDocument(businessDocuments.bankDetails?.documentUrl),
+          taxDocument: formatDocument(businessDocuments.taxId?.documentUrl),
+        }));
+      }
+      
+      // Initialize ID cards
+      const primaryOwner = application.beneficialOwners?.find(owner => owner.isPrimary);
+      
+      if (primaryOwner?.idCardDocuments?.length) {
+        console.log('[BusinessDocuments] Found ID cards:', primaryOwner.idCardDocuments);
+        const formattedIdCards = primaryOwner.idCardDocuments
+          .filter(Boolean) // Remove any null/undefined entries
+          .map(doc => ({
+            key: doc,
+            previewUrl: doc
+          }));
+        
+        console.log('[BusinessDocuments] Formatted ID cards:', formattedIdCards);
+        
+        setDocuments(prev => ({
+          ...prev,
+          idCards: formattedIdCards
+        }));
+      }
+      
+      setIsInitialized(true);
+    }
+  }, [application, setDocuments, isInitialized]);
+
   const documentTypes = [
     {
       key: 'hospitalityLicense' as const,
@@ -50,16 +124,22 @@ export function BusinessDocuments({ documents, setDocuments }: BusinessDocuments
 
   const handleDocumentChange = (docType: keyof typeof documents, newDocs: Array<{ key: string; previewUrl: string }>) => {
     console.log(`[BusinessDocuments] Updating ${docType}:`, newDocs);
+    
+    // Validate and format documents
+    const validDocs = newDocs
+      .filter(doc => doc && doc.key && doc.previewUrl)
+      .map(doc => ({
+        key: doc.key,
+        previewUrl: doc.previewUrl
+      }));
+    
+    console.log(`[BusinessDocuments] Formatted ${docType} documents:`, validDocs);
+    
     setDocuments(prev => ({
       ...prev,
-      [docType]: newDocs
+      [docType]: validDocs
     }));
   };
-
-  // Log document state changes
-  useEffect(() => {
-    console.log('[BusinessDocuments] Current documents state:', documents);
-  }, [documents]);
 
   return (
     <div>
@@ -84,7 +164,7 @@ export function BusinessDocuments({ documents, setDocuments }: BusinessDocuments
               maxImages={doc.key === 'idCards' ? 2 : 1}
               imageType="DOCUMENT"
               acceptDocuments={true}
-              images={documents[doc.key]}
+              images={initialDocuments[doc.key]}
               onImagesChange={(images) => handleDocumentChange(doc.key, images)}
               required={doc.required}
             />

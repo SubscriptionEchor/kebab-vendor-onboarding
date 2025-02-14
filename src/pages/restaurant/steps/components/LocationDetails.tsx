@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, AlertCircle, MapPin, Plus, Minus } from 'lucide-react';
 import { useToast } from '../../../../context/ToastContext';
+import { useRestaurantApplication } from '../../../../context/RestaurantApplicationContext';
 import { validateAddress } from '../../../../utils/validation';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-geosearch/dist/geosearch.css';
@@ -280,52 +281,66 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
 export function LocationDetails({ formData, setFormData }: LocationDetailsProps) {
   const [addressInput, setAddressInput] = useState(formData.address || '');
   const [addressError, setAddressError] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const { application } = useRestaurantApplication();
 
-  // Safely handle address updates from backend
+  // Initialize address from application data
   useEffect(() => {
-    if (!isInitialized && formData.address) {
-      console.log('LocationDetails: Initial address from formData:', formData.address);
-      const formattedAddress = formatAddress(formData.address);
-      console.log('LocationDetails: Setting initial formatted address:', formattedAddress);
-      setAddressInput(formattedAddress);
-      setIsInitialized(true);
+    if (application?.location?.address) {
+      console.log('LocationDetails: Loading address from application:', application.location.address);
+      let address = '';
+      
+      // Handle both string and object address formats
+      if (typeof application.location.address === 'string') {
+        address = application.location.address.trim();
+      } else if (typeof application.location.address === 'object') {
+        // Reconstruct address from components if it's an object
+        const addr = application.location.address;
+        address = [
+          addr.doorNumber,
+          addr.street,
+          addr.area,
+          addr.city,
+          addr.postalCode,
+          addr.country
+        ].filter(Boolean).join(', ');
+      }
+      
+      console.log('LocationDetails: Formatted address:', address);
+      setAddressInput(address);
+      setFormData(prev => ({
+        ...prev,
+        address: address
+      }));
     }
-  }, [formData.address, isInitialized]);
+  }, [application]);
 
   // Update address when location is selected from map
   useEffect(() => {
-    if (isInitialized && formData.address !== addressInput) {
+    if (formData.address && formData.address !== addressInput) {
       console.log('LocationDetails: Address updated from map:', formData.address);
       const formattedAddress = formatAddress(formData.address);
       if (formattedAddress) {
         setAddressInput(formattedAddress);
       }
     }
-  }, [formData.address, addressInput, isInitialized]);
+  }, [formData.address, addressInput]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newAddress = e.target.value;
     
-    // Prevent input if it would exceed 50 characters
-    if (newAddress.length > 50) {
+    // Prevent input if it would exceed 200 characters
+    if (newAddress.length > 200) {
       return;
     }
     
     setAddressInput(newAddress);
-    
-    // Clear error when user starts typing
     setAddressError(null);
     
-    // Validate address format if not empty
-    if (newAddress && !validateAddress(newAddress)) {
-      setAddressError('Address can only contain letters, numbers, spaces, and symbols (/, -, _). No consecutive symbols allowed.');
-    }
-    
     // Update form data with the new address
+    const formattedAddress = newAddress.endsWith(', Germany') ? newAddress : `${newAddress}, Germany`;
     setFormData({
       ...formData,
-      address: newAddress
+      address: formattedAddress
     });
   };
 
@@ -337,8 +352,8 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
         <Input
           value={addressInput}
           onChange={handleAddressChange}
-          placeholder="Enter address (max 50 characters)"
-          maxLength={50}
+          placeholder="Enter full address"
+          maxLength={200}
           className="h-11"
           required
           error={addressError}

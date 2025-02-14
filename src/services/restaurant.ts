@@ -192,6 +192,7 @@ export async function resubmitApplication(applicationId: string, input: any) {
   // Format opening times correctly
   if (input.openingTimes) {
     input.openingTimes = formatOpeningTimes(input.openingTimes);
+    console.log('[resubmitApplication] Formatted opening times:', input.openingTimes);
   }
 
   // Helper function to ensure we get a single-level array of strings
@@ -217,12 +218,24 @@ export async function resubmitApplication(applicationId: string, input: any) {
 
   // Format document URLs
   if (input.businessDocuments) {
+    console.log('[resubmitApplication] Original business documents:', input.businessDocuments);
+
+    // Extract document keys, handling both string and array formats
+    const getDocumentKey = (doc: any): string => {
+      if (!doc) return '';
+      if (typeof doc === 'string') return doc;
+      if (Array.isArray(doc) && doc[0]) {
+        return typeof doc[0] === 'string' ? doc[0] : doc[0].key || '';
+      }
+      return doc.key || '';
+    };
+    
     input.businessDocuments = {
-      hospitalityLicense: input.businessDocuments.hospitalityLicense || '',
-      registrationCertificate: input.businessDocuments.registrationCertificate || '',
+      hospitalityLicense: getDocumentKey(input.businessDocuments.hospitalityLicense),
+      registrationCertificate: getDocumentKey(input.businessDocuments.registrationCertificate),
       taxId: {
         documentNumber: input.businessDocuments.taxId?.documentNumber || 'default',
-        documentUrl: input.businessDocuments.taxId?.documentUrl || ''
+        documentUrl: getDocumentKey(input.businessDocuments.taxId?.documentUrl)
       },
       bankDetails: {
         accountNumber: input.businessDocuments.bankDetails?.accountNumber || '',
@@ -230,42 +243,78 @@ export async function resubmitApplication(applicationId: string, input: any) {
         branchName: input.businessDocuments.bankDetails?.branchName || '',
         bankIdentifierCode: input.businessDocuments.bankDetails?.bankIdentifierCode || '',
         accountHolderName: input.businessDocuments.bankDetails?.accountHolderName || '',
-        documentUrl: input.businessDocuments.bankDetails?.documentUrl || ''
+        documentUrl: getDocumentKey(input.businessDocuments.bankDetails?.documentUrl)
       }
     };
+    
+    console.log('[resubmitApplication] Formatted business documents:', input.businessDocuments);
   }
 
   // Format location and address
   if (input.location?.address) {
-    // Ensure address is a string and trim it
-    input.location.address = typeof input.location.address === 'string'
-      ? input.location.address.trim()
-      : '';
+    console.log('[resubmitApplication] Original address:', input.location.address);
+    
+    // Format address string
+    const formatAddressString = (address: any): string => {
+      if (typeof address === 'string') {
+        return address.trim();
+      }
+    
+      if (typeof address === 'object') {
+        const {
+          doorNumber = '',
+          street = '',
+          area = '',
+          city = 'Berlin',
+          postalCode = '',
+          country = 'Germany'
+        } = address;
+
+        return [doorNumber, street, area, city, postalCode, country]
+          .filter(Boolean)
+          .join(', ')
+          .replace(/,\s*,/g, ',')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    
+      return '';
+    };
+    
+    input.location.address = formatAddressString(input.location.address);
+
     console.log('[resubmitApplication] Formatted address:', input.location.address);
   }
 
   // Format cuisines
   if (input.cuisines) {
-    input.cuisines = input.cuisines.map(cuisine => 
-      typeof cuisine === 'string' ? cuisine.toLowerCase() : cuisine.name.toLowerCase()
-    );
+    input.cuisines = input.cuisines.map(cuisine => {
+      if (typeof cuisine === 'string') return cuisine;
+      return cuisine.name || '';
+    }).filter(Boolean);
+    console.log('[resubmitApplication] Formatted cuisines:', input.cuisines);
   }
 
   // Format image arrays
   if (input.restaurantImages) {
     input.restaurantImages = input.restaurantImages
-      .map(img => typeof img === 'string' ? img : img.key || '')
+      .map(img => typeof img === 'string' ? img : img?.key || '')
       .filter(Boolean);
+    console.log('[resubmitApplication] Formatted restaurant images:', input.restaurantImages);
   }
 
   if (input.menuImages) {
     input.menuImages = input.menuImages
-      .map(img => typeof img === 'string' ? img : img.key || '')
+      .map(img => typeof img === 'string' ? img : img?.key || '')
       .filter(Boolean);
+    console.log('[resubmitApplication] Formatted menu images:', input.menuImages);
   }
 
   if (input.profileImage) {
-    input.profileImage = typeof input.profileImage === 'string' ? input.profileImage : (input.profileImage?.key || '');
+    input.profileImage = typeof input.profileImage === 'string' 
+      ? input.profileImage 
+      : input.profileImage?.key || '';
+    console.log('[resubmitApplication] Formatted profile image:', input.profileImage);
   }
 
   // Format phone numbers in restaurantContactInfo and remove countryCode
@@ -277,20 +326,46 @@ export async function resubmitApplication(applicationId: string, input: any) {
       );
     }
     delete input.restaurantContactInfo.countryCode;
+    console.log('[resubmitApplication] Formatted restaurant contact info:', input.restaurantContactInfo);
   }
 
   // Map beneficialOwners while omitting countryCode using destructuring
   if (input.beneficialOwners) {
-    input.beneficialOwners = input.beneficialOwners.map(({ countryCode, ...owner }) => ({
-      ...owner,
-      phone: owner.phone?.startsWith('+')
-        ? owner.phone
-        : formatPhoneNumber(owner.phone || '', countryCode || 'DE'),
-      isPrimary: owner.isPrimary,
-      idCardDocuments: (owner.idCardDocuments || [])
-        .map(doc => typeof doc === 'string' ? doc : doc.key || '')
-        .filter(Boolean)
-    }));
+    input.beneficialOwners = input.beneficialOwners.map(({ countryCode, ...owner }) => {
+      // Format ID card documents
+      const formatIdCards = (docs: any[]): string[] => {
+        if (!Array.isArray(docs)) return [];
+        return docs
+          .map(doc => {
+            if (typeof doc === 'string') return doc;
+            if (doc && typeof doc === 'object') return doc.key || '';
+            return '';
+          })
+          .filter(Boolean)
+          .slice(0, 2); // Ensure we only take max 2 documents
+      };
+
+      const idCardDocs = owner.isPrimary ? formatIdCards(owner.idCardDocuments || []) : [];
+
+      console.log(`[resubmitApplication] Processing owner documents:`, {
+        isPrimary: owner.isPrimary,
+        idCardDocs
+      });
+
+      if (owner.isPrimary && idCardDocs.length < 2) {
+        throw new ValidationError(['Please upload both front and back sides of your ID card']);
+      }
+
+      return {
+        ...owner,
+        phone: owner.phone?.startsWith('+')
+          ? owner.phone
+          : formatPhoneNumber(owner.phone || '', countryCode || 'DE'),
+        isPrimary: owner.isPrimary,
+        idCardDocuments: idCardDocs
+      };
+    });
+    console.log('[resubmitApplication] Formatted beneficial owners:', input.beneficialOwners);
   }
 
   const headers = {
@@ -447,7 +522,7 @@ function formatPhoneNumber(phone: string, countryCode: string): string {
   const cleanPhone = phone.replace(/\D/g, '');
   if (phone.startsWith('+')) return phone;
   const normalizedPhone = cleanPhone.replace(/^0+/, '');
-  return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
+  return `+49${normalizedPhone}`;
 }
 
 
