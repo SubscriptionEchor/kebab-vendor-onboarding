@@ -1,5 +1,5 @@
+// src/context/RestaurantApplicationContext.tsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useToast } from './ToastContext';
 import type { RestaurantApplication, RestaurantApplicationContextType, RestaurantApplicationResponse } from '../types/restaurant';
 import { graphqlRequest } from '../services/api';
@@ -58,13 +58,11 @@ const RestaurantApplicationContext = createContext<RestaurantApplicationContextT
 export function RestaurantApplicationProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToast();
   const [application, setApplication] = useState<RestaurantApplication | null>(() => {
-    // Only load saved data if we're editing an existing application
     const searchParams = new URLSearchParams(window.location.search);
     const isEditing = searchParams.has('edit');
     const isNewApplication = window.location.pathname === '/restaurants/new' && !isEditing;
 
     try {
-      // Clear saved data for new applications
       if (isNewApplication) {
         localStorage.removeItem('restaurantApplication');
         localStorage.removeItem('restaurantDocuments');
@@ -85,9 +83,7 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   });
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [submissionSnapshot, setSubmissionSnapshot] = useState<RestaurantApplication | null>(null);
 
-  // Load current step from sessionStorage
   useEffect(() => {
     const savedStep = sessionStorage.getItem('currentStep');
     if (savedStep) {
@@ -95,18 +91,14 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     }
   }, []);
 
-  // Save current step to sessionStorage
   useEffect(() => {
     sessionStorage.setItem('currentStep', currentStep.toString());
   }, [currentStep]);
 
-  // Listen for beforeunload event to save data before refresh
   useEffect(() => {
     const handleBeforeUnload = () => {
       const searchParams = new URLSearchParams(window.location.search);
       const isEditing = searchParams.has('edit');
-      
-      // Only save data if we're editing or have made changes
       if (application && (isEditing || JSON.stringify(application) !== JSON.stringify(defaultApplication))) {
         localStorage.setItem('restaurantApplication', JSON.stringify(application));
         sessionStorage.setItem('currentStep', currentStep.toString());
@@ -122,11 +114,9 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       if (!prev) return { ...defaultApplication, ...data };
       const currentApplication = prev || defaultApplication;
 
-      // Deep merge arrays and nested objects
       const updatedApplication: RestaurantApplication = {
         ...currentApplication,
         ...data,
-        // Deep merge arrays
         beneficialOwners: data.beneficialOwners 
           ? [...data.beneficialOwners]
           : [...currentApplication.beneficialOwners],
@@ -142,7 +132,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         openingTimes: data.openingTimes 
           ? [...data.openingTimes]
           : [...currentApplication.openingTimes],
-        // Deep merge nested objects
         restaurantContactInfo: {
           ...currentApplication.restaurantContactInfo,
           ...data.restaurantContactInfo
@@ -172,15 +161,12 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     });
   };
 
-  // Auto-save to localStorage whenever application changes
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const isEditing = searchParams.has('edit');
-    
-    // Debounce localStorage updates
     const timeoutId = setTimeout(() => {
       if (application && (isEditing || JSON.stringify(application) !== JSON.stringify(defaultApplication))) {
-      localStorage.setItem('restaurantApplication', JSON.stringify(application));
+        localStorage.setItem('restaurantApplication', JSON.stringify(application));
       }
     }, 500);
 
@@ -188,7 +174,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
   }, [application]);
 
   const submitApplication = async (snapshot?: RestaurantApplication): Promise<RestaurantApplicationResponse> => {
-    // Always use the provided snapshot if available
     const applicationData = snapshot || application!;
     if (!application) {
       console.error('No application data to submit');
@@ -203,7 +188,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       }))
     });
     
-    // Check if this is a new application or resubmission
     const searchParams = new URLSearchParams(window.location.search);
     const isResubmission = searchParams.has('edit');
 
@@ -212,7 +196,6 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       if (!applicationId) {
         throw new Error('Invalid application ID for resubmission');
       }
-      // For resubmission, use the resubmitApplication function
       return resubmitApplication(applicationId, application);
     }
 
@@ -223,16 +206,15 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
     }
 
     try {
-      // Create complete application snapshot
       const applicationSnapshot = {
         ...applicationData,
-        openingTimes: formatOpeningTimes(application.openingTimes),
+        openingTimes: formatOpeningTimes(applicationData.openingTimes),
         beneficialOwners: applicationData.beneficialOwners.map(({ countryCode, ...owner }) => ({
           ...owner,
           name: owner.name.trim(),
           passportId: owner.passportId.trim(),
           email: owner.email.trim(),
-          phone: formatPhoneNumber(owner.phone, 'DE'), // Using 'DE' here since we don't want to include countryCode
+          phone: formatPhoneNumber(owner.phone, 'DE'),
           isPrimary: owner.isPrimary,
           idCardDocuments: owner.isPrimary ? 
             applicationData.beneficialOwners.find(o => o.isPrimary)?.idCardDocuments || [] :
@@ -279,10 +261,8 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
         }))
       }, null, 2));
 
-      // Validate the complete snapshot
       validateApplicationSnapshot(applicationSnapshot);
 
-      // Submit validated snapshot
       const response = await graphqlRequest<{ createRestaurantOnboardingApplication: RestaurantApplicationResponse }>(
         CREATE_APPLICATION,
         { input: applicationSnapshot },
@@ -301,49 +281,31 @@ export function RestaurantApplicationProvider({ children }: { children: React.Re
       return response.createRestaurantOnboardingApplication;
     } catch (error) {
       console.error('Submission failed:', error);
-      
-      // Rethrow ValidationErrors as is
       if (error instanceof ValidationError) {
         throw error;
-      } 
-      
-      // Convert other errors to ValidationError
+      }
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit application. Please try again.';
       throw new ValidationError([errorMessage]);
     }
   };
 
-  // Helper function to format phone numbers
   function formatPhoneNumber(phone: string, countryCode: string): string {
     const cleanPhone = phone.replace(/\D/g, '');
-    // Keep the phone number as is if it already has a + prefix
     if (phone.startsWith('+')) {
       return phone;
     }
-    // Otherwise, format it with the country code
     const normalizedPhone = cleanPhone.replace(/^0+/, '');
     return `+${countryCode === 'IN' ? '91' : '49'}${normalizedPhone}`;
   }
 
-  // Helper function to format address as a string
   function formatAddressString(address: any): string {
     if (typeof address === 'string') return address;
-    
-    const {
-      doorNumber = '',
-      street = '',
-      area = '',
-      city = 'Berlin',
-      postalCode = '',
-      country = 'Germany'
-    } = address;
-
+    const { doorNumber = '', street = '', area = '', city = 'Berlin', postalCode = '', country = 'Germany' } = address;
     return `${doorNumber},${street}, ${area}, ${city}, ${postalCode}, ${country}`
       .replace(/\s+/g, ' ')
       .trim();
   }
 
-  // Helper function to get document key
   function getDocumentKey(doc: string | { key: string }): string {
     if (!doc) return '';
     return typeof doc === 'string' ? doc : doc.key || '';
