@@ -14,8 +14,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { getApplications } from '../services/restaurant';
 import { useToast } from '../context/ToastContext';
-import { OptimizedImage } from '../components/ui/OptimizedImage';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Application {
   id: string;
@@ -38,6 +38,8 @@ export function ApplicationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const applicationsPerPage = 5;
 
   const handleEditApplication = (applicationId: string) => {
     // Load the application data into the form context
@@ -165,6 +167,17 @@ export function ApplicationsPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredApplications.length / applicationsPerPage);
+  const startIndex = (currentPage - 1) * applicationsPerPage;
+  const endIndex = startIndex + applicationsPerPage;
+  const currentApplications = filteredApplications.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <motion.div
@@ -234,10 +247,10 @@ export function ApplicationsPage() {
             <LoadingSpinner size="lg" className="mb-4" />
             <p className="text-gray-600">Loading applications...</p>
           </div>
-        ) : filteredApplications.length > 0 ? (
+        ) : currentApplications.length > 0 ? (
           <div className="space-y-4">
             <AnimatePresence>
-              {filteredApplications.map((application, index) => {
+              {currentApplications.map((application, index) => {
                 const { icon: StatusIcon, color } = getStatusIcon(application.status);
                 return (
                 <motion.div
@@ -314,6 +327,41 @@ export function ApplicationsPage() {
                 );
               })}
             </AnimatePresence>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => handlePageChange(page)}
+                    className="min-w-[40px]"
+                  >
+                    {page}
+                  </Button>
+                ))}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-12 bg-white rounded-lg shadow-sm">

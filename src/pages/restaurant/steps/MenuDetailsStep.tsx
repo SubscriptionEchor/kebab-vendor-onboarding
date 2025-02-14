@@ -10,6 +10,7 @@ import {
   validateOpeningHours,
 } from "../../../utils/validation";
 import { DEFAULT_BUSINESS_HOURS } from "../../../config/defaults";
+import { ValidationError } from '../../../utils/validation';
 import { CuisineSelection, OpeningHours, RestaurantImages } from './components/MenuDetails';
 
 interface MenuDetailsStepProps {
@@ -218,68 +219,72 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearErrors();
+    
+    // Create a complete snapshot first
+    const menuSnapshot = {
+      profileImage: profileImage[0]?.key,
+      restaurantImages: restaurantImages.map((img) => img.key),
+      menuImages: menuImages.map((img) => img.key),
+      cuisines: selectedCuisines.map((cuisine) => cuisine.trim()),
+      openingTimes: Object.entries(schedule).map(([day, daySchedule]) => ({
+        day,
+        times: daySchedule.isOpen ? [{
+          startTime: [formatTime(daySchedule.startTime)],
+          endTime: [formatTime(daySchedule.endTime)]
+        }] : [],
+        isOpen: daySchedule.isOpen
+      }))
+    };
 
     try {
-      // Validate required fields
-      if (profileImage.length === 0) {
-        throw new Error("Please upload a profile image");
-      }
+      // Validate the snapshot
+      validateMenuSnapshot(menuSnapshot);
 
-      if (restaurantImages.length < 2) {
-        throw new Error("Please upload at least 2 restaurant images");
-      }
-
-      if (menuImages.length === 0) {
-        throw new Error("Please upload at least one menu image");
-      }
-
-      if (selectedCuisines.length !== 3) {
-        throw new Error("Please select exactly 3 cuisines");
-      }
-
-      // Format opening times
-      const openingTimes = Object.entries(schedule).map(
-        ([day, daySchedule]) => {
-          // Ensure time is in HH:mm format
-          const formatTime = (time: string) => {
-            const [hours, minutes] = time.split(":");
-            return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
-          };
-
-          return {
-            day,
-            times: daySchedule.isOpen
-              ? [
-                  {
-                    startTime: [formatTime(daySchedule.startTime)],
-                    endTime: [formatTime(daySchedule.endTime)],
-                  },
-                ]
-              : [],
-            isOpen: daySchedule.isOpen,
-          };
-        }
-      );
-
-      // Prepare form data
-      const formData = {
-        profileImage: profileImage[0]?.key,
-        restaurantImages: restaurantImages.map((img) => img.key),
-        menuImages: menuImages.map((img) => img.key),
-        cuisines: selectedCuisines.map((cuisine) => cuisine.trim()),
-        openingTimes,
-      };
-
-      // Update application and move to next step
-      updateApplication(formData);
+      // Update application with validated snapshot
+      updateApplication(menuSnapshot);
       onNext();
     } catch (error) {
       console.error("Form submission error:", error);
-      if (error instanceof Error) {
-        alert(error.message);
+      
+      if (error instanceof ValidationError) {
+        setErrors(error.errors);
+        showToast('Please fix the validation errors and try again', 'error');
       } else {
-        alert("Please fill in all required fields");
+        const errorMessage = error instanceof Error ? error.message : 'Please fill in all required fields';
+        setErrors([errorMessage]);
+        showToast(errorMessage, 'error');
       }
+    }
+  };
+
+  // Helper function to format time
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(":");
+    return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+  };
+
+  // Validation function for menu snapshot
+  const validateMenuSnapshot = (snapshot: any): void => {
+    const errors = [];
+
+    if (!snapshot.profileImage) {
+      errors.push('Profile image is required');
+    }
+    if (!snapshot.restaurantImages || snapshot.restaurantImages.length < 2) {
+      errors.push('At least 2 restaurant images are required');
+    }
+    if (!snapshot.menuImages || snapshot.menuImages.length === 0) {
+      errors.push('At least one menu image is required');
+    }
+    if (!snapshot.cuisines || snapshot.cuisines.length !== 3) {
+      errors.push('Please select exactly 3 cuisines');
+    }
+    if (!snapshot.openingTimes || !snapshot.openingTimes.some(time => time.isOpen)) {
+      errors.push('At least one opening time is required');
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
     }
   };
 

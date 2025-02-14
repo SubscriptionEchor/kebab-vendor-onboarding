@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, X, FileText, AlertCircle, Info } from "lucide-react";
+import { Upload, X, FileText, AlertCircle, Info, Image } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../../context/ToastContext"; 
 import { ALLOWED_FILE_TYPES, FILE_SIZE_LIMITS } from "../../constants/fileUpload"; 
@@ -17,6 +17,16 @@ interface ImageUploadProps {
   imageType?: ImageType;
   required?: boolean;
   className?: string;
+}
+
+// Helper function to get meaningful upload status message
+function getUploadStatus(progress: number): string {
+  if (!progress) return 'Preparing upload...';
+  if (progress < 25) return 'Starting upload...';
+  if (progress < 50) return 'Uploading file...';
+  if (progress < 75) return 'Processing...';
+  if (progress < 100) return 'Almost done...';
+  return 'Finalizing...';
 }
 
 export function ImageUpload({
@@ -77,13 +87,26 @@ export function ImageUpload({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length + images.length > maxImages) {
-      setUploadError(`You can only upload up to ${maxImages} images`);
-      showToast(`You can only upload up to ${maxImages} images`, 'error');
+      const error = `You can only upload up to ${maxImages} ${maxImages === 1 ? 'file' : 'files'}`;
+      setUploadError(error);
+      showToast(error, 'error');
       return;
     }
 
     setIsUploading(true);
     try {
+      // Validate file types
+      const invalidFiles = files.filter(file => {
+        const allowedTypes = acceptDocuments ? 
+          ALLOWED_FILE_TYPES.DOCUMENTS : 
+          ALLOWED_FILE_TYPES.IMAGES;
+        return !allowedTypes.includes(file.type);
+      });
+
+      if (invalidFiles.length > 0) {
+        throw new Error(`Invalid file type. Please upload ${acceptDocuments ? 'PDF or images' : 'images'} only.`);
+      }
+
       const uploadedFiles = [];
       for (const file of files) {
         try {
@@ -255,11 +278,25 @@ export function ImageUpload({
                     </p>
                   </div>
                 ) : (
-                  <img
-                    src={image?.previewUrl || ""}
-                    alt={`Upload ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
+                  <div className="relative w-full h-full">
+                    <img
+                      src={image?.previewUrl || ""}
+                      alt={`Upload ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                    <div className="hidden w-full h-full bg-gray-100 flex flex-col items-center justify-center p-4">
+                      <div className="bg-white rounded-lg p-3 shadow-sm">
+                        <Image className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <p className="text-sm text-gray-600 text-center mt-2 line-clamp-1">
+                        {image.key.split('/').pop() || 'Image failed to load'}
+                      </p>
+                    </div>
+                  </div>
                 )}
                 <button
                   type="button"
@@ -289,7 +326,7 @@ export function ImageUpload({
             )}
             <span className="text-sm font-medium">
               {isUploading
-                ? `Uploading... ${Object.values(progress)[0]}%`
+                ? getUploadStatus(Object.values(progress)[0])
                 : "Drop images here or click to upload"}
             </span>
             <span className="text-xs mt-1">

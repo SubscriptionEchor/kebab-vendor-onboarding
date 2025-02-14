@@ -215,3 +215,103 @@ export function validateArea(area: string): { isValid: boolean; message?: string
 
   return { isValid: true };
 }
+
+export class ValidationError extends Error {
+  constructor(public errors: string[] | string) {
+    super(Array.isArray(errors) ? errors.join(', ') : errors);
+    this.name = 'ValidationError';
+    this.errors = Array.isArray(errors) ? errors : [errors];
+  }
+}
+
+export function validateApplicationSnapshot(snapshot: any) {
+  const errors: string[] = [];
+
+  // Validate required fields
+  if (!snapshot.restaurantName?.trim()) {
+    errors.push('Restaurant name is required');
+  }
+  if (!snapshot.companyName?.trim()) {
+    errors.push('Company name is required');
+  }
+  if (!snapshot.restaurantContactInfo?.email?.trim()) {
+    errors.push('Restaurant email is required');
+  }
+  if (!snapshot.restaurantContactInfo?.phone?.trim()) {
+    errors.push('Restaurant phone is required');
+  }
+  if (!snapshot.location?.address) {
+    errors.push('Restaurant address is required');
+  }
+  if (!snapshot.restaurantImages?.length || snapshot.restaurantImages.length < 2) {
+    errors.push('At least 2 restaurant images are required');
+  }
+  if (!snapshot.menuImages?.length) {
+    errors.push('At least one menu image is required');
+  }
+  if (!snapshot.profileImage) {
+    errors.push('Profile image is required');
+  }
+  if (!snapshot.cuisines?.length || snapshot.cuisines.length !== 3) {
+    errors.push('Please select exactly 3 cuisines');
+  }
+  if (!snapshot.beneficialOwners?.some(owner => owner.isPrimary)) {
+    errors.push('Primary owner information is required');
+  }
+  if (!snapshot.businessDocuments?.hospitalityLicense) {
+    errors.push('Hospitality license is required');
+  }
+  if (!snapshot.businessDocuments?.registrationCertificate) {
+    errors.push('Registration certificate is required');
+  }
+  if (!snapshot.businessDocuments?.taxId?.documentUrl) {
+    errors.push('Tax document is required');
+  }
+
+  // Required fields validation
+  if (!snapshot.restaurantName?.trim()) {
+    errors.push('Restaurant name is required');
+  }
+  if (!snapshot.companyName?.trim()) {
+    errors.push('Company name is required');
+  }
+  if (!snapshot.restaurantContactInfo?.email?.trim()) {
+    errors.push('Restaurant email is required');
+  }
+  if (!snapshot.restaurantContactInfo?.phone?.trim()) {
+    errors.push('Restaurant phone is required');
+  }
+  if (!snapshot.location?.address) {
+    errors.push('Restaurant address is required');
+  }
+  if (!snapshot.restaurantImages?.length || snapshot.restaurantImages.length < 2) {
+    errors.push('At least 2 restaurant images are required');
+  }
+  if (!snapshot.menuImages?.length) {
+    errors.push('At least one menu image is required');
+  }
+  if (!snapshot.profileImage) {
+    errors.push('Profile image is required');
+  }
+  if (!snapshot.cuisines?.length || snapshot.cuisines.length !== 3) {
+    errors.push('Please select exactly 3 cuisines');
+  }
+  if (!snapshot.beneficialOwners?.some(owner => owner.isPrimary)) {
+    errors.push('Primary owner information is required');
+  }
+  if (!snapshot.businessDocuments?.hospitalityLicense) {
+    errors.push('Hospitality license is required');
+  }
+  if (!snapshot.businessDocuments?.registrationCertificate) {
+    errors.push('Registration certificate is required');
+  }
+  if (!snapshot.businessDocuments?.taxId?.documentUrl) {
+    errors.push('Tax document is required');
+  }
+
+  if (errors.length > 0) {
+    throw new ValidationError(errors);
+  }
+
+  return true;
+}
