@@ -12,8 +12,8 @@
   "dependencies": {
     "canvas-confetti": "^1.9.2",
     "framer-motion": "^11.0.8",
-    "leaflet": "^1.9.4",
     "leaflet-geosearch": "^3.11.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -1,5 +1,6 @@
 // src/services/restaurant.ts
 import { graphqlRequest } from './api';
+import { ValidationError, validateApplicationSnapshot } from '../utils/validation';
 import type { 
   CreateRestaurantResponse, 
   UpdateRestaurantResponse, 
@@ -174,11 +175,6 @@ export async function resubmitApplication(applicationId: string, input: any) {
     }
   });
 
-  // Format opening times correctly
-  if (input.openingTimes) {
-    input.openingTimes = formatOpeningTimes(input.openingTimes);
-  }
-
   // Helper function to format opening times
   function formatOpeningTimes(times: any[]) {
     return times.map(time => ({
@@ -191,6 +187,11 @@ export async function resubmitApplication(applicationId: string, input: any) {
           }]
         : []
     }));
+  }
+
+  // Format opening times correctly
+  if (input.openingTimes) {
+    input.openingTimes = formatOpeningTimes(input.openingTimes);
   }
 
   // Helper function to ensure we get a single-level array of strings
@@ -232,6 +233,15 @@ export async function resubmitApplication(applicationId: string, input: any) {
         documentUrl: input.businessDocuments.bankDetails?.documentUrl || ''
       }
     };
+  }
+
+  // Format location and address
+  if (input.location?.address) {
+    // Ensure address is a string and trim it
+    input.location.address = typeof input.location.address === 'string'
+      ? input.location.address.trim()
+      : '';
+    console.log('[resubmitApplication] Formatted address:', input.location.address);
   }
 
   // Format cuisines
@@ -293,6 +303,7 @@ export async function resubmitApplication(applicationId: string, input: any) {
   };
 
   try {
+    // Log the complete input for debugging
     console.log('Submitting resubmission with formatted data:', JSON.stringify({
       applicationId,
       input: {
@@ -303,8 +314,6 @@ export async function resubmitApplication(applicationId: string, input: any) {
         }))
       }
     }, null, 2));
-
-    console.log('[resubmitApplication] Final input object:', JSON.stringify(input, null, 2));
 
     // Validate the input before submission
     console.log('[resubmitApplication] Validating input data...');
@@ -330,6 +339,15 @@ export async function resubmitApplication(applicationId: string, input: any) {
       console.error('[resubmitApplication] Validation error:', error.errors);
       throw error;
     }
+
+    // Enhance error handling
+    if (error instanceof Error) {
+      if (error.message.includes('validation')) {
+        throw new ValidationError(['Please ensure all required fields are filled correctly']);
+      }
+      throw new Error(`Submission failed: ${error.message}`);
+    }
+
     throw error;
   }
 }
@@ -359,7 +377,20 @@ export async function getApplicationById(applicationId: string) {
     );
     
     const applicationData = applicationResponse.getRestaurantOnboardingApplicationById;
-    console.log('[getApplicationById] Application data:', applicationData);
+    console.log('[getApplicationById] Raw application data:', {
+      location: applicationData.location,
+      address: applicationData.location?.address
+    });
+    
+    // Ensure address is properly formatted
+    if (applicationData.location?.address) {
+      console.log('[getApplicationById] Original address:', applicationData.location.address);
+      // Ensure we're working with a string
+      applicationData.location.address = typeof applicationData.location.address === 'string' 
+        ? applicationData.location.address.trim() 
+        : '';
+      console.log('[getApplicationById] Formatted address:', applicationData.location.address);
+    }
     
     const urlsToFetch = [
       applicationData.profileImage,
@@ -424,16 +455,18 @@ export async function getApplications(token: string) {
   if (!token) {
     throw new Error('Authentication required');
   }
-
+  console.log('[getApplications] Starting fetch with token:', token.substring(0, 10) + '...');
 
   try {
     // Verify token is valid
     const payload = JSON.parse(atob(token.split('.')[1]));
     if (Date.now() >= payload.exp * 1000) {
+      console.log('[getApplications] Token expired');
       localStorage.removeItem('authToken');
       throw new Error('Session expired');
     }
   } catch (error) {
+    console.log('[getApplications] Token validation failed:', error);
     localStorage.removeItem('authToken');
     throw new Error('Invalid token');
   }
@@ -448,14 +481,34 @@ export async function getApplications(token: string) {
   };
 
   try {
+    console.log('[getApplications] Making API request...');
     const response = await graphqlRequest<GetApplicationsResponse>(GET_APPLICATIONS, undefined, headers);
+    console.log('[getApplications] Received response:', response);
     return response;
   } catch (error) {
-    console.error('Failed to fetch applications:', error);
-    if (error instanceof Error && error.message.includes('401')) {
+    console.error('[getApplications] Failed to fetch applications:', error);
+    
+    // Handle authentication errors
+    if (error instanceof Error && (
+      error.message.includes('401') || 
+      error.message.includes('unauthorized') ||
+      error.message.includes('Authentication required')
+    )) {
+      console.log('[getApplications] Authentication error detected');
       localStorage.removeItem('authToken');
-      throw new Error('Session expired');
+      throw new Error('Please log in again to continue');
     }
+    
+    // Handle network errors
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    
+    // Handle other errors
+    if (error instanceof Error) {
+      throw new Error(error.message || 'Failed to load applications');
+    }
+    
     throw error;
   }
 }

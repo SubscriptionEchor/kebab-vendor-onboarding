@@ -52,6 +52,7 @@ export function ApplicationsPage() {
 
   const fetchApplicationData = async () => {
     if (!localStorage.getItem('authToken')) {
+      console.log('No auth token found, skipping fetch');
       setIsLoading(false);
       return;
     }
@@ -63,18 +64,22 @@ export function ApplicationsPage() {
     try {
       const token = localStorage.getItem('authToken');
       if (!token) {
+        console.log('Token not found, redirecting to login');
         navigate('/login');
         return;
       }
 
+      console.log('Fetching applications...');
       const response = await getApplications(token);
       const applications = response.getRestaurantOnboardingApplication;
       
       if (!applications || applications.length === 0) {
+        console.log('No applications found');
         setApplications([]);
         return;
       }
 
+      console.log('Processing applications:', applications.length);
       const formattedApplications = applications.map(app => {
         const documents = [
           {
@@ -104,11 +109,12 @@ export function ApplicationsPage() {
       setApplications(formattedApplications);
 
     } catch (error) {
-      console.error('Failed to fetch applications:', error);
+      console.error('Error in fetchApplicationData:', error);
       if (error instanceof Error) {
-        if (error.message.includes('Session expired') || 
+        if (error.message.includes('Please log in') || 
             error.message.includes('Invalid token') ||
             error.message.includes('Authentication required')) {
+          console.log('Auth error detected, redirecting to login');
           localStorage.removeItem('authToken');
           navigate('/login');
         } else {
@@ -116,7 +122,7 @@ export function ApplicationsPage() {
         }
       } else {
         setIsError(true);
-        setError('Failed to load applications. Please try again.');
+        setError('An unexpected error occurred. Please try again.');
       }
     } finally {
       setIsLoading(false);

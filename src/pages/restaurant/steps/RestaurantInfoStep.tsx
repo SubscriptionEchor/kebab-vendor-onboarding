@@ -43,7 +43,7 @@ const validateSnapshot = (snapshot: any): void => {
   if (!snapshot.restaurantContactInfo.phone) {
     errors.push('Restaurant phone is required');
   }
-  if (!snapshot.location.address.street || !snapshot.location.address.doorNumber) {
+  if (!snapshot.location.address) {
     errors.push('Complete address is required');
   }
   if (!snapshot.beneficialOwners.some(owner => owner.isPrimary)) {
@@ -71,14 +71,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     restaurantEmail: '',
     restaurantPhone: '',
     restaurantCountryCode: 'DE',
-    address: {
-      doorNumber: '',
-      street: '',
-      area: '',
-      city: '',
-      postalCode: '',
-      country: 'Germany',
-    },
+    address: '',
     location: {
       lat: DEFAULT_LOCATION.lat,
       lng: DEFAULT_LOCATION.lng,
@@ -100,57 +93,40 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
   useEffect(() => {
     if (application) {
       console.log('Initializing form data from application:', application);
-
-      // Extract address components
-      const address = typeof application.location?.address === 'object' 
-        ? application.location.address
-        : {
-            doorNumber: '',
-            street: '',
-            area: '',
-            city: 'Berlin',
-            postalCode: '',
-            country: 'Germany'
-          };
-      // Extract address components from the stored address
-      let addressComponents = {
-        doorNumber: '',
-        street: '',
-        area: '',
-        city: 'Berlin',
-        postalCode: '',
-        country: 'Germany'
-      };
-
-      if (typeof application.location?.address === 'object') {
-        addressComponents = {
-          doorNumber: application.location.address.doorNumber || '',
-          street: application.location.address.street || '',
-          area: application.location.address.area || '',
-          city: application.location.address.city || 'Berlin',
-          postalCode: application.location.address.postalCode || '',
-          country: application.location.address.country || 'Germany'
-        };
+      
+      // Handle address from backend
+      let address = '';
+      if (application.location?.address) {
+        // Handle both string and object address formats
+        address = typeof application.location.address === 'string' 
+          ? application.location.address.trim() 
+          : '';
+        console.log('Parsed address from application:', address);
       }
+
+      console.log('Setting address from application:', address);
 
       // Get coordinates
       const coordinates = application.location?.coordinates?.coordinates || [DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat];
       const [lng, lat] = coordinates;
 
+      // Update form data with address and coordinates
       setFormData(prev => ({
         ...prev,
         companyName: application.companyName || '',
         restaurantName: application.restaurantName || '',
         restaurantEmail: application.restaurantContactInfo?.email || '',
         restaurantPhone: application.restaurantContactInfo?.phone || '',
-        address: addressComponents,
+        address: address,
         location: {
           lat: lat || DEFAULT_LOCATION.lat,
           lng: lng || DEFAULT_LOCATION.lng
         }
       }));
+
+      // Save to localStorage with proper address
       localStorage.setItem('restaurantFormData', JSON.stringify({
-        address: addressComponents,
+        address: address,
         location: {
           lat: lat || DEFAULT_LOCATION.lat,
           lng: lng || DEFAULT_LOCATION.lng
@@ -238,14 +214,7 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
             parseFloat(formData.location.lat.toFixed(6))
           ]
         },
-        address: {
-          doorNumber: formData.address.doorNumber.trim(),
-          street: formData.address.street.trim(),
-          area: formData.address.area.trim(),
-          city: formData.address.city,
-          postalCode: formData.address.postalCode.trim(),
-          country: formData.address.country
-        }
+        address: formData.address
       },
       beneficialOwners: [
         {
@@ -262,17 +231,11 @@ export function RestaurantInfoStep({ onNext }: RestaurantInfoStepProps) {
     };
     
     try {
-      // Format address according to backend expectations
-      const formattedAddress = [
-        formData.address.doorNumber,
-        formData.address.street,
-        formData.address.area,
-        `${formData.address.postalCode} ${formData.address.city}`.trim(),
-        formData.address.country
-      ].filter(Boolean).join(', ');
-
       // Validate the snapshot
       validateSnapshot(formSnapshot);
+      
+      // Update the snapshot with the full address
+      formSnapshot.location.address = formData.address;
       
       // Update application with validated snapshot
       await updateApplication(formSnapshot);

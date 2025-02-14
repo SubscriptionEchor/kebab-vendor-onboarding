@@ -29,16 +29,7 @@ export interface RestaurantLocation {
     type: 'Point';
     coordinates: [number, number]; // [longitude, latitude]
   };
-  address: string | RestaurantAddress;
-}
-
-export interface RestaurantAddress {
-  doorNumber: string;
-  street: string;
-  area: string;
-  city: string;
-  postalCode: string;
-  country: string;
+  address: string;
 }
 
 export interface OpeningTime {

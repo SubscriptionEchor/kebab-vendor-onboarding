@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, AlertCircle, MapPin, Plus, Minus } from 'lucide-react';
 import { useToast } from '../../../../context/ToastContext';
+import { validateAddress } from '../../../../utils/validation';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-geosearch/dist/geosearch.css';
 
@@ -31,19 +32,9 @@ interface Location {
   address?: string;
 }
 
-import { validateArea } from '../../../../utils/validation';
-
 interface LocationDetailsProps {
   formData: {
-    address: {
-      doorNumber: string;
-      number: string;
-      street: string;
-      area: string;
-      city: string;
-      postalCode: string;
-      country: string;
-    };
+    address: string;
     location: {
       lat: number;
       lng: number;
@@ -97,6 +88,18 @@ function ZoomControl() {
   );
 }
 
+// Helper function to format address
+const formatAddress = (address: string): string => {
+  if (!address || typeof address !== 'string') return '';
+  console.log('formatAddress input:', address);
+  const formatted = address
+    .replace(/, Deutschland$/, ', Germany')
+    .replace(/\s+/g, ' ')
+    .trim();
+  console.log('Formatted address:', { input: address, output: formatted });
+  return formatted;
+};
+
 function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Location) => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -104,7 +107,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   const [outOfBounds, setOutOfBounds] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const map = useMap();
-  const provider = new OpenStreetMapProvider();
+  const provider = useMemo(() => new OpenStreetMapProvider(), []);
   const { showToast } = useToast();
   const searchTimeout = useRef<NodeJS.Timeout>();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -200,13 +203,15 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
     }
     
     setOutOfBounds(false);
-    const location = {
+    const formattedAddress = formatAddress(result.label);
+    const selectedLocation = {
       lat: result.y,
       lng: result.x,
-      address: result.label,
+      address: formattedAddress,
     };
-    onLocationSelect(location);
-    map.setView([location.lat, location.lng], 16);
+    
+    onLocationSelect(selectedLocation);
+    map.setView([selectedLocation.lat, selectedLocation.lng], 16);
     setResults([]);
     setIsDropdownOpen(false);
     setSearchQuery('');
@@ -272,192 +277,72 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   );
 }
 
-function validateDoorNumber(value: string) {
-  // Don't show error for empty value - let HTML5 validation handle required state
-  if (!value) {
-    return { isValid: true, message: '' };
-  }
-  
-  // Check for invalid characters
-  if (/[^A-Za-z0-9/-]/.test(value)) {
-    return {
-      isValid: false,
-      message: 'Only letters, numbers, hyphens (-) and forward slashes (/) are allowed'
-    };
-  }
-
-  // Check length
-  if (value.length > 10) {
-    return {
-      isValid: false,
-      message: 'Door/Flat number cannot exceed 10 characters'
-    };
-  }
-
-  // Check for consecutive special characters
-  if (/[-]{2,}|[/]{2,}/.test(value)) {
-    return {
-      isValid: false,
-      message: 'Cannot use consecutive hyphens or slashes'
-    };
-  }
-
-  // Check if it starts or ends with a special character
-  if (/^[-/]|[-/]$/.test(value)) {
-    return {
-      isValid: false,
-      message: 'Cannot start or end with a hyphen or slash'
-    };
-  }
-  
-  return { isValid: true, message: '' };
-}
-
 export function LocationDetails({ formData, setFormData }: LocationDetailsProps) {
+  const [addressInput, setAddressInput] = useState(formData.address || '');
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Safely handle address updates from backend
+  useEffect(() => {
+    if (!isInitialized && formData.address) {
+      console.log('LocationDetails: Initial address from formData:', formData.address);
+      const formattedAddress = formatAddress(formData.address);
+      console.log('LocationDetails: Setting initial formatted address:', formattedAddress);
+      setAddressInput(formattedAddress);
+      setIsInitialized(true);
+    }
+  }, [formData.address, isInitialized]);
+
+  // Update address when location is selected from map
+  useEffect(() => {
+    if (isInitialized && formData.address !== addressInput) {
+      console.log('LocationDetails: Address updated from map:', formData.address);
+      const formattedAddress = formatAddress(formData.address);
+      if (formattedAddress) {
+        setAddressInput(formattedAddress);
+      }
+    }
+  }, [formData.address, addressInput, isInitialized]);
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newAddress = e.target.value;
+    
+    // Prevent input if it would exceed 50 characters
+    if (newAddress.length > 50) {
+      return;
+    }
+    
+    setAddressInput(newAddress);
+    
+    // Clear error when user starts typing
+    setAddressError(null);
+    
+    // Validate address format if not empty
+    if (newAddress && !validateAddress(newAddress)) {
+      setAddressError('Address can only contain letters, numbers, spaces, and symbols (/, -, _). No consecutive symbols allowed.');
+    }
+    
+    // Update form data with the new address
+    setFormData({
+      ...formData,
+      address: newAddress
+    });
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-900">Restaurant Location</h2>
-      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-        {/* First Row - Door No. and Street */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-1">
-            <RequiredLabel>Door/Flat No.</RequiredLabel>
-            <Input
-              pattern="[A-Za-z0-9/-]+"
-              value={formData.address.doorNumber || ''}
-              onChange={async (e) => {
-                const value = e.target.value;
-                const validation = validateDoorNumber(value);
-                
-                // Check for invalid characters immediately
-                if (/[^A-Za-z0-9/-]/.test(value)) {
-                  e.target.setCustomValidity('Only letters, numbers, hyphens (-) and forward slashes (/) are allowed');
-                  return;
-                }
-                
-                // Validate the complete value
-                if (!validation.isValid) {
-                  e.target.setCustomValidity(validation.message);
-                } else {
-                  e.target.setCustomValidity('');
-                  setFormData({
-                    ...formData,
-                    address: { ...formData.address, doorNumber: value }
-                  });
-                }
-              }}
-              onInvalid={(e: React.InvalidEvent<HTMLInputElement>) => {
-                const value = e.target.value;
-                if (!value) {
-                  // Let HTML5 handle the required message
-                  e.target.setCustomValidity('');
-                } else {
-                  const validation = validateDoorNumber(value);
-                  e.target.setCustomValidity(validation.message || '');
-                }
-              }}
-              placeholder="e.g., 42A"
-              className="h-11"
-              maxLength={10}
-              title="Letters, numbers, hyphens (-) and forward slashes (/) only. Cannot start/end with special characters."
-              required
-              error={formData.address.doorNumber ? validateDoorNumber(formData.address.doorNumber).message : undefined}
-            />
-          </div>
-          <div className="md:col-span-3">
-            <RequiredLabel>Street</RequiredLabel>
-            <Input
-              value={formData.address.street || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                address: { ...formData.address, street: e.target.value }
-              })}
-              placeholder="Enter street name"
-              className="h-11"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Second Row - Area */}
-        <div>
-          <RequiredLabel>Area</RequiredLabel>
-          <Input
-            pattern="[A-Za-z0-9\s\-\.]+"
-            value={formData.address.area || ''}
-            onChange={async (e) => {
-              const value = e.target.value;
-              
-              // Check for invalid characters immediately
-              if (/[^A-Za-z0-9\s\-\.]/.test(value)) {
-                e.target.setCustomValidity('Only letters, numbers, spaces, hyphens (-) and periods (.) are allowed');
-                return;
-              }
-              
-              // Clear any previous validation message
-              e.target.setCustomValidity('');
-              
-              // Update the form data
-              setFormData({
-                ...formData,
-                address: { 
-                  ...formData.address, 
-                  area: value 
-                }
-              });
-              
-              // Validate after updating
-              const validation = validateArea(value);
-              if (!validation.isValid && validation.message) {
-                e.target.setCustomValidity(validation.message);
-              }
-            }}
-            onInvalid={(e: React.InvalidEvent<HTMLInputElement>) => {
-              const value = e.target.value;
-              if (!value) {
-                // Let HTML5 handle the required message
-                e.target.setCustomValidity('');
-              } else {
-                const validation = validateArea(value);
-                e.target.setCustomValidity(validation.message || '');
-              }
-            }}
-            placeholder="Enter area or neighborhood (e.g., Mitte, Kreuzberg)"
-            className="h-11"
-            maxLength={50}
-            title="Letters, numbers, spaces, hyphens (-) and periods (.) only. Cannot start/end with special characters."
-            required
-            error={formData.address.area ? validateArea(formData.address.area).message : undefined}
-          />
-        </div>
-
-        {/* Third Row - City and Postal Code */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <RequiredLabel>City</RequiredLabel>
-            <Input
-              value="Berlin"
-              disabled
-              className="h-11 bg-gray-50 cursor-not-allowed"
-              required
-            />
-          </div>
-          <div>
-            <RequiredLabel>Postal Code</RequiredLabel>
-            <Input
-              pattern="[0-9]{5}"
-              maxLength={5}
-              value={formData.address.postalCode || ''}
-              onChange={(e) => setFormData({
-                ...formData,
-                address: { ...formData.address, postalCode: e.target.value }
-              })}
-              placeholder="e.g., 10115"
-              className="h-11"
-              required
-            />
-          </div>
-        </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <RequiredLabel>Full Address</RequiredLabel>
+        <Input
+          value={addressInput}
+          onChange={handleAddressChange}
+          placeholder="Enter address (max 50 characters)"
+          maxLength={50}
+          className="h-11"
+          required
+          error={addressError}
+        />
       </div>
 
       <div>
@@ -481,6 +366,7 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
             <SearchControl onLocationSelect={(location) => {
               setFormData(prev => ({
                 ...prev,
+                address: location.address || prev.address,
                 location: {
                   lat: location.lat,
                   lng: location.lng
