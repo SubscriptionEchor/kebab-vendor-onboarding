@@ -1,0 +1,9 @@
+[[redirects]]
+  from = "/old-page"
+  to = "/new-page"
+  status = 301
+
+[[redirects]]
+  from = "/another-old-page"
+  to = "/another-new-page"
+  status = 301
