@@ -46,7 +46,7 @@ interface LocationDetailsProps {
 
 function ZoomControl() {
   const map = useMap();
-  
+
   const handleZoomIn = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -136,7 +136,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node) &&
-          inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        inputRef.current && !inputRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
@@ -155,10 +155,10 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
 
     setIsSearching(true);
     setOutOfBounds(false);
-    
+
     try {
       // Force search within Berlin
-      const results = await provider.search({ 
+      const results = await provider.search({
         query: `${query}, Berlin, Germany`,
         bounds: [
           [BERLIN_BOUNDS.south, BERLIN_BOUNDS.west],
@@ -190,10 +190,10 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
   }, [searchQuery, handleSearch]);
 
   const isLocationInBerlin = (lat: number, lng: number) => {
-    return lat >= BERLIN_BOUNDS.south && 
-           lat <= BERLIN_BOUNDS.north && 
-           lng >= BERLIN_BOUNDS.west && 
-           lng <= BERLIN_BOUNDS.east;
+    return lat >= BERLIN_BOUNDS.south &&
+      lat <= BERLIN_BOUNDS.north &&
+      lng >= BERLIN_BOUNDS.west &&
+      lng <= BERLIN_BOUNDS.east;
   };
 
   const handleSelect = (result: any) => {
@@ -202,7 +202,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
       showToast('Currently we only operate in Berlin. Please select a location within Berlin city limits.', 'error');
       return;
     }
-    
+
     setOutOfBounds(false);
     const formattedAddress = formatAddress(result.label);
     const selectedLocation = {
@@ -210,7 +210,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
       lng: result.x,
       address: formattedAddress,
     };
-    
+
     onLocationSelect(selectedLocation);
     map.setView([selectedLocation.lat, selectedLocation.lng], 16);
     setResults([]);
@@ -262,7 +262,7 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
             ))}
           </div>
         )}
-        
+
         {outOfBounds && (
           <div className="absolute top-full left-0 right-0 mt-2 p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">
             <div className="flex items-center gap-2">
@@ -279,16 +279,17 @@ function SearchControl({ onLocationSelect }: { onLocationSelect: (location: Loca
 }
 
 export function LocationDetails({ formData, setFormData }: LocationDetailsProps) {
-  const [addressInput, setAddressInput] = useState(formData.address || '');
+  const [addressInput, setAddressInput] = useState('');
   const [addressError, setAddressError] = useState<string | null>(null);
   const { application } = useRestaurantApplication();
 
   // Initialize address from application data
   useEffect(() => {
+
     if (application?.location?.address) {
       console.log('LocationDetails: Loading address from application:', application.location.address);
       let address = '';
-      
+
       // Handle both string and object address formats
       if (typeof application.location.address === 'string') {
         address = application.location.address.trim();
@@ -304,7 +305,7 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
           addr.country
         ].filter(Boolean).join(', ');
       }
-      
+
       console.log('LocationDetails: Formatted address:', address);
       setAddressInput(address);
       setFormData(prev => ({
@@ -324,23 +325,23 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
       }
     }
   }, [formData.address, addressInput]);
+  console.log(formData, addressInput, "FD")
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newAddress = e.target.value;
-    
+
     // Prevent input if it would exceed 200 characters
     if (newAddress.length > 200) {
       return;
     }
-    
+
     setAddressInput(newAddress);
     setAddressError(null);
-    
+
     // Update form data with the new address
-    const formattedAddress = newAddress.endsWith(', Germany') ? newAddress : `${newAddress}, Germany`;
     setFormData({
       ...formData,
-      address: formattedAddress
+      address: newAddress
     });
   };
 
@@ -372,7 +373,7 @@ export function LocationDetails({ formData, setFormData }: LocationDetailsProps)
             style={{ height: '100%', width: '100%', zIndex: 1 }}
             scrollWheelZoom={true}
             zoomControl={false} // Disable default zoom control
-          > 
+          >
             <ZoomControl />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
