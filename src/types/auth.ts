@@ -14,8 +14,7 @@ export interface AuthState {
 
 export interface AuthContextType extends AuthState {
   login: (phone: string, countryCode: string) => Promise<void>;
+  verifyOTP: (phone: string, otp: string) => Promise<any>;
   logout: () => void;
-  register: (phone: string, countryCode: string, name: string) => Promise<void>; 
-  refreshSession: () => Promise<void>;
   sessionStatus: 'active' | 'expired' | 'refreshing' | null;
 }

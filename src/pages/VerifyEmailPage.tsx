@@ -27,22 +27,16 @@ export function VerifyEmailPage() {
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     if (!token) {
+      console.log('[VerifyEmailPage] No auth token found, redirecting to login');
       navigate('/login');
+      return;
     }
   }, [navigate]);
 
-  const handleRefreshConfirm = () => {
-    setShowRefreshConfirmation(false);
-  };
-
   const handleBack = () => {
-    setShowRefreshConfirmation(true);
-  };
-
-  const handleBackConfirm = () => {
-    // Store a flag indicating the user chose to skip email verification
-    localStorage.setItem('skipEmailVerification', 'true');
-    navigate('/applications');
+    // For new users, don't allow going back
+    setErrors(['Please complete email verification to continue']);
+    return;
   };
 
   const fireConfetti = () => {
@@ -84,23 +78,30 @@ export function VerifyEmailPage() {
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    setIsLoading(true);
     
-    if (!validateEmail(email)) {
-      setErrors(['Please enter a valid email address']);
-      setIsLoading(false);
+    // Validate email before sending
+    if (!email) {
+      setErrors(['Please enter your email address']);
       return;
     }
+
+    if (!validateEmail(email)) {
+      setErrors(['Please enter a valid email address']);
+      return;
+    }
+    
+    setIsLoading(true);
     
     try {
       const response = await sendEmailOTP(email);
       
       if (response.sendEmailOtpForOnboardingVendor.result) {
         setIsEmailSent(true);
+        setOtp(''); // Reset OTP when sending new code
       } else {
         const errorMessage = response.sendEmailOtpForOnboardingVendor.message;
         if (errorMessage.includes('already exists')) {
-          setErrors(['This email is already registered. Please use a different email address or contact our support team for help.']);
+          setErrors(['This email is already registered. Please use a different email address.']);
         } else {
           setErrors([errorMessage]);
         }
@@ -108,7 +109,12 @@ export function VerifyEmailPage() {
     } catch (error) {
       console.error('Failed to send email:', error);
       if (error instanceof Error) {
-        if (error.message.includes('log in again')) {
+        // Handle specific validation errors
+        if (error.message.includes('validation')) {
+          setErrors(['Please enter a valid email address']);
+        } else if (error.message.includes('already exists')) {
+          setErrors(['This email is already registered. Please use a different email address.']);
+        } else if (error.message.includes('log in again')) {
           navigate('/login');
         } else {
           setErrors([error.message]);
@@ -124,6 +130,14 @@ export function VerifyEmailPage() {
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
+
+    // Validate OTP format
+    const cleanOtp = otp.replace(/\D/g, '');
+    if (cleanOtp.length !== 4) {
+      setErrors(['Please enter a valid 4-digit verification code']);
+      return;
+    }
+
     setIsLoading(true);
 
     if (!email) {
@@ -139,7 +153,7 @@ export function VerifyEmailPage() {
     }
 
     try {
-      const response = await verifyEmailOTP(email, otp);
+      const response = await verifyEmailOTP(email, cleanOtp);
 
       if (!response || !response.verifyEmailOtpForOnboardingVendor || !response.verifyEmailOtpForOnboardingVendor.emailIsVerified) {
         throw new Error('Email verification failed. Please try again.');
@@ -150,14 +164,11 @@ export function VerifyEmailPage() {
       // Store verified email
       localStorage.setItem('verifiedEmail', email);
 
-      // Show success animation
+      // Show success animation and redirect
       fireConfetti();
-      
-      // Wait for animation before redirecting
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Redirect to dashboard
-      navigate('/dashboard');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
     } catch (error) {
       console.error('Email verification failed:', error);
       if (error instanceof Error) {
@@ -286,7 +297,7 @@ export function VerifyEmailPage() {
       <RefreshConfirmationDialog
         isOpen={showRefreshConfirmation}
         onClose={() => setShowRefreshConfirmation(false)}
-        onConfirm={handleBackConfirm}
+        onConfirm={() => {}}
         title="Skip Email Verification?"
         message="If you go back now, you'll need to verify your email later in your profile settings. Do you want to continue?"
       />
@@ -299,7 +310,7 @@ export function VerifyEmailPage() {
         transition={{ duration: 0.8 }}>
         <div className="absolute inset-0 w-full h-full">
           <img
-            src="https://cdn.dribbble.com/userupload/12272146/file/original-839557f4883c81f19fdac3da6401505a.png?resize=2048x1537&vertical=center"
+            src="https://cdn.midjourney.com/6faeb637-362b-48ad-8540-4fe9124d8e46/0_0.png"
             alt="Dashboard Preview"
             className="w-full h-full object-cover"
           />

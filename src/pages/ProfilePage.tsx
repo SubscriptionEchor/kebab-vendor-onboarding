@@ -37,7 +37,6 @@ export function ProfilePage() {
   }, []);
 
   const [formData, setFormData] = useState({
-    name: user?.name || '',
     email: user?.email || '',
     phone: user?.phone?.replace(/^\+\d{2}/, '') || '', // Remove country code
     countryCode: 'DE'
@@ -46,30 +45,10 @@ export function ProfilePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    
-    // Validate name
-    const trimmedName = formData.name.trim();
-    if (!trimmedName) {
-      setErrors(['Name is required']);
-      return;
-    }
-
-    if (trimmedName.length < 2) {
-      setErrors(['Name must be at least 2 characters long']);
-      return;
-    }
 
     setIsLoading(true);
 
     try {
-      // Save name to localStorage
-      localStorage.setItem('userName', trimmedName);
-      
-      // Update user context
-      if (user) {
-        user.name = trimmedName;
-      }
-      
       showToast('Profile updated successfully', 'success');
     } catch (error) {
       console.error('Failed to update profile:', error);
@@ -125,9 +104,8 @@ export function ProfilePage() {
       return;
     }
 
-    const emailError = getEmailValidationError(formData.email);
-    if (emailError) {
-      setErrors([emailError]);
+    if (!validateEmail(formData.email)) {
+      setErrors(['Please enter a valid email address']);
       return;
     }
 
@@ -136,16 +114,29 @@ export function ProfilePage() {
       const response = await sendEmailOTP(formData.email);
       if (response.sendEmailOtpForOnboardingVendor.result) {
         setIsEmailSent(true);
+        setOtp(''); // Reset OTP when sending new code
         showToast('Verification code sent to your email', 'success');
       } else {
-        throw new Error(response.sendEmailOtpForOnboardingVendor.message);
+        const errorMessage = response.sendEmailOtpForOnboardingVendor.message;
+        if (errorMessage.includes('already exists')) {
+          setErrors(['This email is already registered. Please use a different email address.']);
+        } else {
+          setErrors([errorMessage]);
+        }
       }
     } catch (error) {
       console.error('Failed to send email OTP:', error);
       if (error instanceof Error) {
-        setErrors([error.message]);
+        // Handle specific validation errors
+        if (error.message.includes('validation')) {
+          setErrors(['Please enter a valid email address']);
+        } else if (error.message.includes('already exists')) {
+          setErrors(['This email is already registered. Please use a different email address.']);
+        } else {
+          setErrors([error.message]);
+        }
       } else {
-        setErrors(['Failed to send verification code']);
+        setErrors([error.message]);
       }
     } finally {
       setIsLoading(false);
@@ -158,9 +149,16 @@ export function ProfilePage() {
       return;
     }
 
+    // Validate OTP format
+    const cleanOtp = otp.replace(/\D/g, '');
+    if (cleanOtp.length !== 4) {
+      setErrors(['Please enter a valid 4-digit verification code']);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const response = await verifyEmailOTP(formData.email, otp);
+      const response = await verifyEmailOTP(formData.email, cleanOtp);
       if (response.verifyEmailOtpForOnboardingVendor.emailIsVerified) {
         setIsEmailVerified(true);
         // Store email verification status
@@ -176,9 +174,17 @@ export function ProfilePage() {
     } catch (error) {
       console.error('Failed to verify email:', error);
       if (error instanceof Error) {
-        setErrors([error.message]);
+        // Handle specific error cases
+        if (error.message.includes('expired')) {
+          setErrors(['Verification code has expired. Please request a new code']);
+          setOtp(''); // Clear expired OTP
+        } else if (error.message.includes('invalid') || error.message.includes('incorrect')) {
+          setErrors(['Invalid verification code. Please try again']);
+        } else {
+          setErrors([error.message]);
+        }
       } else {
-        setErrors(['Failed to verify email']);
+        setErrors([error.message]);
       }
     } finally {
       setIsLoading(false);
@@ -194,8 +200,11 @@ export function ProfilePage() {
         className="space-y-8"
       >
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900 font-display">
-            Profile Settings
+          <h1 className="text-3xl font-bold text-gray-900 font-display flex items-center gap-3">
+            <span>My Profile</span>
+            <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center">
+              <User className="h-4 w-4 text-brand-primary" />
+            </div>
           </h1>
           <Button
             variant="outline"
@@ -222,32 +231,12 @@ export function ProfilePage() {
             {/* Basic Information */}
             <div>
               <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                Basic Information
+                Personal Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="block w-full rounded-lg border border-gray-300 px-3 py-2 pl-10 text-gray-900 placeholder:text-gray-400 focus:border-brand-primary focus:ring-brand-primary sm:text-sm"
-                      placeholder="Enter your full name"
-                      required
-                      minLength={2}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
+                    Contact Number
                   </label>
                   <div className="opacity-50">
                     <PhoneInput
@@ -294,13 +283,16 @@ export function ProfilePage() {
               {isEmailSent && (
                 <div className="bg-brand-accent/10 rounded-lg p-6 mb-6">
                   <h3 className="text-sm font-medium text-gray-900 mb-4">
-                    Enter Verification Code
+                    Enter 4-digit Verification Code
                   </h3>
                   <div className="space-y-4">
                     <Input
                       type="text"
+                      pattern="\d*"
+                      maxLength={4}
+                      inputMode="numeric"
                       value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
                       placeholder="Enter verification code"
                       className="text-lg"
                     />
@@ -309,6 +301,7 @@ export function ProfilePage() {
                         type="button"
                         variant="outline"
                         onClick={handleSendEmailOTP}
+                        isLoading={isLoading}
                       >
                         Resend Code
                       </Button>
@@ -339,7 +332,7 @@ export function ProfilePage() {
                         onClick={handleSendEmailOTP}
                         isLoading={isLoading}
                       >
-                        Verify Email
+                        Send OTP
                       </Button>
                     </div>
                   </div>

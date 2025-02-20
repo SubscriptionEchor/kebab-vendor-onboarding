@@ -1,5 +1,15 @@
 // src/services/restaurant.ts
 import { graphqlRequest } from './api';
+import { 
+  CREATE_APPLICATION, 
+  CREATE_RESTAURANT, 
+  UPDATE_RESTAURANT, 
+  RESUBMIT_APPLICATION,
+  GET_APPLICATIONS,
+  GET_CUISINES,
+  GET_APPLICATION_BY_ID,
+  GET_PRESIGNED_URL 
+} from '../graphql';
 import { ValidationError, validateApplicationSnapshot } from '../utils/validation';
 import type { 
   CreateRestaurantResponse, 
@@ -8,153 +18,6 @@ import type {
   GetCuisinesResponse,
   GetApplicationsResponse
 } from './types';
-
-const CREATE_APPLICATION = `
-  mutation CreateApplication($input: RestaurantOnboardingApplicationInput!) {
-    createRestaurantOnboardingApplication(input: $input) {
-      _id
-      resubmissionCount
-      applicationStatus
-      restaurantName
-      createdAt
-    }
-  }
-`;
-
-const GET_APPLICATIONS = `
-  query VendorApplications {
-    getRestaurantOnboardingApplication {
-      _id
-      restaurantName
-      applicationStatus
-      resubmissionCount
-      createdAt
-      statusHistory {
-        status
-        timestamp
-        reason
-      }
-      location {
-        address
-      }
-      businessDocuments {
-        hospitalityLicense
-        registrationCertificate
-        taxId {
-          documentUrl
-        }
-      }
-    }
-  }
-`;
-
-const GET_CUISINES = `
-  query VendorOnboardingBootstrap {
-    vendorOnboardingBootstrap {
-      cuisines {
-        name
-      }
-    }
-  }
-`;
-
-const CREATE_RESTAURANT = `
-  mutation CreateRestaurant($input: CreateRestaurantInput!) {
-    createRestaurant(input: $input) {
-      id
-      name
-      status
-    }
-  }
-`;
-
-const UPDATE_RESTAURANT = `
-  mutation UpdateRestaurant($id: ID!, $input: UpdateRestaurantInput!) {
-    updateRestaurant(id: $id, input: $input) {
-      id
-      name
-      status
-    }
-  }
-`;
-
-const GET_PRESIGNED_URL = `
-  query GetPresignedUrls($urlsRequested: [String!]!) {
-    getVendorApplicationAccessiblePresignedUrls(urlsRequested: $urlsRequested)
-  }
-`;
-
-const GET_APPLICATION_BY_ID = `
-  query GetRestaurantOnboardingApplicationById($applicationId: String!) {
-    getRestaurantOnboardingApplicationById(applicationId: $applicationId) {
-      restaurantId
-      profileImage
-      _id
-      potentialVendor
-      beneficialOwners {
-        name
-        passportId
-        email
-        phone
-        isPrimary
-        emailVerified
-        idCardDocuments
-      }
-      companyName
-      restaurantName
-      restaurantContactInfo {
-        email
-        phone
-        emailVerified
-      }
-      location {
-        coordinates {
-          coordinates
-        }
-        address
-      }
-      restaurantImages
-      menuImages
-      cuisines
-      openingTimes {
-        day
-        times {
-          startTime
-          endTime
-        }
-        isOpen
-      }
-      businessDocuments {
-        hospitalityLicense
-        registrationCertificate
-        bankDetails {
-          accountNumber
-          bankName
-          branchName
-          bankIdentifierCode
-          accountHolderName
-          documentUrl
-        }
-        taxId {
-          documentNumber
-          documentUrl
-        }
-      }
-    }
-  }
-`;
-
-const RESUBMIT_APPLICATION = `
-  mutation ResubmitRestaurantOnboardingApplication($applicationId: ID!, $input: RestaurantOnboardingApplicationInput!) {
-    resubmitRestaurantOnboardingApplication(applicationId: $applicationId, input: $input) {
-      _id
-      resubmissionCount
-      applicationStatus
-      restaurantName
-      createdAt
-    }
-  }
-`;
 
 // Other functions (createRestaurant, updateRestaurant, etc.) remain unchanged
 

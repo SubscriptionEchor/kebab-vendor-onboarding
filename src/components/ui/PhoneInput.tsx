@@ -32,19 +32,13 @@ export default function PhoneInput({
   const [isValid, setIsValid] = useState(true);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cursorPosition = e.target.selectionStart || 0;
     const inputValue = e.target.value;
     
     // Remove any existing country code prefix
     const cleanValue = inputValue.replace(/^\+\d{2}/, '');
     
     // Check for invalid characters
-    if (/[a-zA-Z]/.test(cleanValue)) {
-      setValidationError('Only numbers allowed');
-      return;
-    }
-    
-    if (/[^0-9\s]/.test(cleanValue)) {
+    if (/[^\d\s]/.test(cleanValue)) {
       setValidationError('Only numbers allowed');
       return;
     }
@@ -58,14 +52,6 @@ export default function PhoneInput({
     
     // Update the input value
     onPhoneChange(newValue);
-    
-    // Restore cursor position on next tick
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.selectionStart = cursorPosition;
-        inputRef.current.selectionEnd = cursorPosition;
-      }
-    }, 0);
   };
 
   return (

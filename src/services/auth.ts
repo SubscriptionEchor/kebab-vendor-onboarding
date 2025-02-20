@@ -1,4 +1,6 @@
 import { graphqlRequest } from './api';
+import { validateEmail } from '../utils/validation';
+import { SEND_PHONE_OTP, VERIFY_PHONE_OTP, SEND_EMAIL_OTP, VERIFY_EMAIL_OTP } from '../graphql';
 import type {
   SendPhoneOTPResponse,
   VerifyPhoneOTPResponse,
@@ -6,67 +8,23 @@ import type {
   VerifyEmailOTPResponse
 } from './types';
 
-const SEND_PHONE_OTP = `
-  mutation SendPhoneOTP($phoneNumber: String!) {
-    sendPhoneOtpForOnboardingVendorLogin(phoneNumber: $phoneNumber) {
-      result
-      retryAfter
-      message
-      validFor
-    }
-  }
-`;
-
-const VERIFY_PHONE_OTP = `
-  mutation VerifyPhoneOTP($phoneNumber: String!, $otp: String!) {
-    verifyPhoneOtpForOnboardingVendorAndLogin(phoneNumber: $phoneNumber, otp: $otp) {
-      token
-      isNewVendor
-      potentialVendor {
-        _id
-        phoneNumber
-        phoneIsVerified
-        emailIsVerified
-        assignedVendorId
-        createdAt
-      }
-    }
-  }
-`;
-
-const SEND_EMAIL_OTP = `
-  mutation SendEmailOTP($input: EmailVerificationInput!) {
-    sendEmailOtpForOnboardingVendor(input: $input) {
-      result
-      retryAfter
-      message
-    }
-  }
-`;
-
-const VERIFY_EMAIL_OTP = `
-  mutation VerifyEmailOTP($input: EmailVerificationInput!, $otp: String!) {
-    verifyEmailOtpForOnboardingVendor(input: $input, otp: $otp) {
-      _id
-      email
-      emailIsVerified
-      phoneNumber
-      phoneIsVerified
-    }
-  }
-`;
-
 export async function sendPhoneOTP(phoneNumber: string) {
-  console.log('Sending phone OTP for:', phoneNumber);
+  console.log('[sendPhoneOTP] Starting with phone:', phoneNumber);
   try {
     // Ensure phone number has proper country code
     const formattedPhone = phoneNumber.startsWith('+') ? 
       phoneNumber : 
       `+${phoneNumber.replace(/^0+/, '')}`;
+    console.log('[sendPhoneOTP] Formatted phone:', formattedPhone);
 
-    return graphqlRequest<SendPhoneOTPResponse>(SEND_PHONE_OTP, { phoneNumber: formattedPhone });
+    const response = await graphqlRequest<SendPhoneOTPResponse>(
+      SEND_PHONE_OTP, 
+      { phoneNumber: formattedPhone }
+    );
+    console.log('[sendPhoneOTP] Response:', response);
+    return response;
   } catch (error) {
-    console.error('Failed to send OTP:', error);
+    console.error('[sendPhoneOTP] Failed:', error);
     if (error instanceof Error) {
       throw new Error(`Failed to send verification code: ${error.message}`);
     }
@@ -75,7 +33,7 @@ export async function sendPhoneOTP(phoneNumber: string) {
 }
 
 export async function verifyPhoneOTP(phoneNumber: string, otp: string) {
-  console.log('Verifying phone OTP for:', phoneNumber);
+  console.log('[verifyPhoneOTP] Starting verification for:', phoneNumber);
   try {
     if (!phoneNumber) {
       throw new Error('Phone number is required');
@@ -83,16 +41,22 @@ export async function verifyPhoneOTP(phoneNumber: string, otp: string) {
     
     // Clean and validate OTP
     const cleanOtp = otp.replace(/\D/g, '');
+    console.log('[verifyPhoneOTP] Cleaned OTP:', cleanOtp);
     if (!cleanOtp || cleanOtp.length !== 4) {
       throw new Error('Invalid verification code format');
     }
 
-    return graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { 
+    const response = await graphqlRequest<VerifyPhoneOTPResponse>(VERIFY_PHONE_OTP, { 
       phoneNumber: phoneNumber.trim(),
       otp: cleanOtp
     });
+    console.log('[verifyPhoneOTP] Response:', {
+      token: response.verifyPhoneOtpForOnboardingVendorAndLogin.token ? 'present' : 'missing',
+      isNewVendor: response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor
+    });
+    return response;
   } catch (error) {
-    console.error('Phone verification failed:', error);
+    console.error('[verifyPhoneOTP] Failed:', error);
     if (error instanceof Error) {
       if (error.message.includes('401') || error.message.includes('unauthorized')) {
         throw new Error('Session expired. Please try again.');
@@ -115,27 +79,55 @@ export async function sendEmailOTP(email: string) {
     throw new Error('Please log in again to verify your email');
   }
 
+  // Validate email format before sending request
+  if (!validateEmail(email)) {
+    throw new Error('Please enter a valid email address');
+  }
+
   try {
-  return graphqlRequest<SendEmailOTPResponse>(
-    SEND_EMAIL_OTP,
-    {
-      input: { email }
-    },
-    {
-      'Authorization': `bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
-      'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
-      'Priority': 'u=1, i'
+    const response = await graphqlRequest<SendEmailOTPResponse>(
+      SEND_EMAIL_OTP,
+      {
+        input: { email: email.trim().toLowerCase() }
+      },
+      {
+        'Authorization': `bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://vendor-onboarding-qa.kebapp-chefs.com',
+        'Referer': 'https://vendor-onboarding-qa.kebapp-chefs.com/',
+        'Priority': 'u=1, i'
+      }
+    );
+
+    if (!response.sendEmailOtpForOnboardingVendor.result) {
+      throw new Error(response.sendEmailOtpForOnboardingVendor.message || 'Failed to send verification code');
     }
-  );
+
+    return response;
   } catch (error) {
     console.error('Failed to send email:', error);
     if (error instanceof Error) {
-      throw new Error(error.message || 'Failed to send verification email');
+      // Handle specific error codes
+      if (error.message === 'EMAIL_ALREADY_REGISTERED' || error.message.includes('already registered')) {
+        throw new Error('Email already exists, please try with a new email');
+      }
+      
+      // Handle validation errors
+      if (error.message.includes('validation') || error.message.includes('invalid')) {
+        throw new Error('Please enter a valid email address');
+      }
+      
+      // Handle other known errors
+      if (error.message.includes('log in') || error.message.includes('token')) {
+        throw new Error('Please log in again to continue');
+      }
+      
+      // Pass through the original error message
+      throw error;
     }
+    
     throw new Error('Failed to send verification email. Please try again.');
   }
 }

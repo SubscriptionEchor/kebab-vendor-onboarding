@@ -130,26 +130,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthToken(null);
   };
 
-  const register = async (phone: string, countryCode: string, name: string) => {
-    setIsLoading(true);
-    try {
-      const newUser = {
-        id: '1',
-        email: '',
-        phone,
-        name,
-        role: 'owner',
-      };
-      setUser(newUser);
-      // Save user to localStorage
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
-      setSessionStatus('active');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Monitor token expiration
   useEffect(() => {
     if (authToken) {
@@ -186,16 +166,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authToken]);
 
+  const verifyOTP = async (phone: string, otp: string) => {
+    setIsLoading(true);
+    try {
+      console.log('[AuthContext] Verifying OTP for phone:', phone);
+      const response = await verifyPhoneOTP(phone, otp);
+      console.log('[AuthContext] OTP verification response:', response);
+      
+      if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
+        const token = response.verifyPhoneOtpForOnboardingVendorAndLogin.token;
+        const { potentialVendor, isNewVendor } = response.verifyPhoneOtpForOnboardingVendorAndLogin;
+        
+        // Store token
+        console.log('[AuthContext] Storing auth token');
+        localStorage.setItem('authToken', token);
+        setAuthToken(token);
+        
+        // Store user info
+        const userInfo = {
+          id: potentialVendor._id,
+          phone: potentialVendor.phoneNumber,
+          email: '',
+          name: 'Restaurant Owner',
+          role: 'owner'
+        };
+        console.log('[AuthContext] Storing user info:', userInfo);
+        localStorage.setItem('user', JSON.stringify(userInfo));
+        setUser(userInfo);
+        
+        // Navigate based on user status
+        console.log('[AuthContext] Navigating based on user status. isNewVendor:', isNewVendor);
+        if (isNewVendor) {
+          navigate('/verify-email');
+        } else {
+          navigate('/applications');
+        }
+        
+        return response;
+      } else {
+        throw new Error('Verification failed');
+      }
+    } catch (error) {
+      console.error('OTP verification failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!authToken,
         isLoading,
         login,
+        verifyOTP,
         logout,
-        register,
-        refreshSession,
         sessionStatus
       }}
     >
@@ -211,35 +238,3 @@ export function useAuth() {
   }
   return context;
 }
-
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
-  
-  // Check if user chose to skip email verification
-  const skipEmailVerification = localStorage.getItem('skipEmailVerification') === 'true';
-  
-  try {
-    const response = await verifyPhoneOTP(user.phone, otpString);
-    
-    if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
-      localStorage.setItem('authToken', response.verifyPhoneOtpForOnboardingVendorAndLogin.token);
-
-      if (response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor && !skipEmailVerification) {
-        navigate('/verify-email');
-        return;
-      } 
-      
-      // Clear the skip flag after use
-      localStorage.removeItem('skipEmailVerification');
-      navigate('/applications');
-    } else {
-      setErrors(['Verification failed. Please try again.']);
-    }
-  } catch (error) {
-    console.error('Verification error:', error);
-    setErrors(['An error occurred during verification.']);
-  } finally {
-    setIsLoading(false);
-  }
-};

@@ -135,16 +135,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
       setSelectedCuisines(normalizedCuisines);
     }
   }, [application, cuisines.length]);
-  const { errors, validate, clearErrors } = useFormValidation({
-    profileImage: validateImage,
-    restaurantImages: (images) => images.length >= 2 && images.length <= 4,
-    menuImages: (images) => images.length >= 1 && images.length <= 4,
-    cuisines: validateCuisines,
-    openingTimes: (times) =>
-      Object.values(times).every(
-        (t) => !t.isOpen || (t.startTime && t.endTime)
-      ),
-  });
   const [schedule, setSchedule] = useState<WeekSchedule>({
     MON: { isOpen: true, startTime: "09:00", endTime: "22:00" },
     TUE: { isOpen: true, startTime: "09:00", endTime: "22:00" },
@@ -218,7 +208,6 @@ export function MenuDetailsStep({ onNext, onBack }: MenuDetailsStepProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearErrors();
     
     // Create a complete snapshot first
     const menuSnapshot = {

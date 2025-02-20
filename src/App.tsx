@@ -6,9 +6,9 @@ import { MainLayout } from './layouts/MainLayout';
 import { VerifyPhonePage } from './pages/VerifyPhonePage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { RegisterView } from './pages/RegisterView';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './pages/LoginView';
-import { VerifyOTPPage } from './pages/VerifyOTPPage';
 import { ApplicationsPage } from './pages/ApplicationsPage';
 import { RootErrorBoundary } from './components/RootErrorBoundary';
 import { ProfilePage } from './pages/ProfilePage.tsx';
@@ -43,7 +43,6 @@ function App() {
           <Route path="/login" element={<LoginView />} />
           <Route path="/verify-phone" element={<VerifyPhonePage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/verify-otp" element={<VerifyOTPPage />} />
           
           {/* Protected Routes */}
           <Route element={<PrivateRoute><RestaurantApplicationProvider><MainLayout /></RestaurantApplicationProvider></PrivateRoute>}>

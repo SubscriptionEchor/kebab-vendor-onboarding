@@ -51,7 +51,7 @@ export function Navbar() {
                     <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center">
                       <User className="h-4 w-4 text-brand-primary" />
                     </div>
-                    <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                    <span className="text-sm font-medium text-gray-700">My Profile</span>
                   </button>
                 </div>
                 <Button

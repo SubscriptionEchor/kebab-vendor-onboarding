@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../../context/ToastContext';
 import { useRestaurantApplication } from '../../../context/RestaurantApplicationContext';
-import { useFormValidation } from '../../../hooks/useFormValidation';
 import { Button } from '../../../components/ui/Button';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { SuccessDialog } from '../../../components/ui/SuccessDialog';
@@ -152,13 +151,6 @@ function DocumentsStep({ onBack }: DocumentsStepProps) {
     }
   }, [application]);
 
-  const { errors: validationErrors, validate, clearErrors } = useFormValidation({
-    // Only validate required documents
-    hospitalityLicense: (value: boolean) => value,
-    registrationCertificate: (value: boolean) => value,
-    taxDocument: (value: boolean) => value,
-    idCards: (value: boolean) => value,
-  });
   const [documents, setDocuments] = useState({
     hospitalityLicense: [] as { key: string; previewUrl: string }[],
     registrationCertificate: [] as { key: string; previewUrl: string }[],
@@ -178,7 +170,6 @@ function DocumentsStep({ onBack }: DocumentsStepProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearErrors();
     
     console.log('[DocumentsStep] Starting submission with documents:', {
       hospitalityLicense: documents.hospitalityLicense[0]?.key,

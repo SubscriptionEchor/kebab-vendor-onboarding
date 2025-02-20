@@ -11,19 +11,23 @@ import { getApplications } from '../services/restaurant';
 
 export function VerifyPhonePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const pendingPhone = localStorage.getItem('pendingPhone');
   const [otp, setOtp] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [timer, setTimer] = useState(30);
   const [errors, setErrors] = useState<string[]>([]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [showRefreshConfirmation, setShowRefreshConfirmation] = useState(false);
+  const auth = useAuth();
 
   useEffect(() => {
-    if (!user?.phone) {
+    if (!pendingPhone) {
+      console.log('No pending phone found, redirecting to login');
+      localStorage.removeItem('pendingPhone');
+      localStorage.removeItem('pendingCountryCode');
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [pendingPhone, navigate]);
 
   useEffect(() => {
     if (timer > 0) {
@@ -73,10 +77,10 @@ export function VerifyPhonePage() {
   };
 
   const handleResend = async () => {
-    if (!user?.phone) return;
+    if (!pendingPhone) return;
     
     try {
-      const response = await sendPhoneOTP(user.phone);
+      const response = await sendPhoneOTP(pendingPhone);
       if (response.sendPhoneOtpForOnboardingVendorLogin.result) {
         setTimer(30);
       } else {
@@ -91,43 +95,34 @@ export function VerifyPhonePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-
+    setIsLoading(true);
+    
     // Clean and validate OTP
     const otpString = otp.join('');
     const cleanOtp = otpString.replace(/\D/g, '');
     
     if (!cleanOtp || cleanOtp.length !== 4) {
       setErrors(['Please enter a complete 4-digit verification code']);
+      setIsLoading(false);
       return;
     }
-
-    if (!user?.phone) {
+    
+    // Get stored phone number
+    const pendingPhone = localStorage.getItem('pendingPhone');
+    if (!pendingPhone) {
       setErrors(['Phone number not found. Please try logging in again']);
       navigate('/login');
       return;
     }
-
-    setIsLoading(true);
+    
     try {
-      const response = await verifyPhoneOTP(user.phone, otpString);
-      setErrors([]); // Clear any existing errors on success
-      
-      if (response.verifyPhoneOtpForOnboardingVendorAndLogin.token) {
-        // Store the token for future API calls
-        localStorage.setItem('authToken', response.verifyPhoneOtpForOnboardingVendorAndLogin.token);
+      await auth.verifyOTP(pendingPhone, otpString);
 
-        // Check if this is a new vendor
-        if (response.verifyPhoneOtpForOnboardingVendorAndLogin.isNewVendor) {
-          navigate('/verify-email');
-          return;
-        } 
-        
-        navigate('/applications');
-      } else {
-        setErrors(['Verification failed. Please try again.']);
-      }
+      // Clean up stored phone number
+      localStorage.removeItem('pendingPhone');
+      localStorage.removeItem('pendingCountryCode');
     } catch (error) {
-      console.error('Phone verification failed:', error);
+      console.error('[VerifyPhonePage] Verification failed:', error);
       let errorMessage = 'Verification failed. Please try again';
       
       if (error instanceof Error) {
@@ -264,7 +259,7 @@ export function VerifyPhonePage() {
         transition={{ duration: 0.8 }}>
         <div className="absolute inset-0 w-full h-full">
           <img
-            src="https://cdn.dribbble.com/userupload/12272146/file/original-839557f4883c81f19fdac3da6401505a.png?resize=2048x1537&vertical=center"
+            src="https://cdn.midjourney.com/6faeb637-362b-48ad-8540-4fe9124d8e46/0_0.png"
             alt="Dashboard Preview"
             className="w-full h-full object-cover"
           />

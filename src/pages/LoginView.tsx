@@ -1,16 +1,17 @@
-import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { validateEmail, validatePhone } from '../utils/validation';
 import { Button } from '../components/ui/Button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PhoneInput from '../components/ui/PhoneInput';
 import { ErrorAlert } from '../components/ui/ErrorAlert';
-import { sendPhoneOTP } from '../services/auth';
+import { sendPhoneOTP } from '../services/auth'; 
+import { motion, AnimatePresence } from 'framer-motion'; 
 
 export function LoginView() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('DE');
   const [errors, setErrors] = useState<string[]>([]);
@@ -19,11 +20,17 @@ export function LoginView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors([]);
-    
+    console.log('[LoginView] Starting login with phone:', phone);
+    console.log('[LoginView] Starting login with phone:', phone);
+
     // Clean the phone number
     const cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
+    console.log('[LoginView] Cleaned phone:', cleanPhone);
+    console.log('[LoginView] Cleaned phone:', cleanPhone);
 
     if (!validatePhone(cleanPhone, countryCode)) {
+      console.log('[LoginView] Phone validation failed');
+      console.log('[LoginView] Phone validation failed');
       setErrors([
         countryCode === 'IN'
           ? 'Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9'
@@ -35,10 +42,28 @@ export function LoginView() {
     setIsLoading(true);
     try {
       const formattedPhone = `${countryCode === 'IN' ? '+91' : '+49'}${cleanPhone}`;
-      await login(formattedPhone, countryCode);
-      navigate('/verify-phone');
+      console.log('[LoginView] Formatted phone:', formattedPhone);
+      console.log('[LoginView] Formatted phone:', formattedPhone);
+
+      const response = await sendPhoneOTP(formattedPhone);
+      console.log('[LoginView] OTP response:', response);
+      console.log('[LoginView] OTP response:', response);
+      
+      if (response.sendPhoneOtpForOnboardingVendorLogin.result) {
+        // Store phone number for verification
+        localStorage.setItem('pendingPhone', formattedPhone);
+        localStorage.setItem('pendingCountryCode', countryCode);
+        console.log('[LoginView] Stored phone info, navigating to verify-phone');
+        console.log('[LoginView] Stored phone info, navigating to verify-phone');
+        navigate('/verify-phone');
+      } else {
+        const errorMessage = response.sendPhoneOtpForOnboardingVendorLogin.message;
+        console.log('[LoginView] OTP send failed:', errorMessage);
+        console.log('[LoginView] OTP send failed:', errorMessage);
+        setErrors([errorMessage]);
+      }
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('[LoginView] Login failed:', error);
       if (error instanceof Error) {
         setErrors([error.message]);
       } else {
@@ -112,21 +137,13 @@ export function LoginView() {
             className="w-full text-lg py-6"
             isLoading={isLoading}
           >
-            Send Code
+            Sign In
           </Button>
         </form>
 
         <p className="mt-8 text-sm text-gray-500 max-w-md">
           By signing up, you agree to our Terms of Service, Privacy Policy, and Cookie Policy
         </p>
-        <div className="mt-4 text-center">
-          <a
-            href="mailto:helpdesk@kebapp.club"
-            className="text-sm text-brand-secondary hover:text-brand-primary transition-colors inline-flex items-center gap-1"
-          >
-            Need help? Contact our support team
-          </a>
-        </div>
       </motion.div>
 
       {/* Right Side - Image */}
@@ -134,10 +151,19 @@ export function LoginView() {
         className="hidden md:block relative overflow-hidden h-full"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.8 }}>
-        <div className="absolute inset-0 w-full h-full">
+        transition={{ duration: 0.8 }}
+      >
+        <div className="absolute inset-0 w-full h-full flex flex-col">
+          <div className="absolute top-4 right-4 z-10">
+            <a
+              href="mailto:helpdesk@kebapp.club"
+              className="text-sm text-white hover:text-brand-primary transition-colors inline-flex items-center gap-1 bg-black/30 backdrop-blur-sm px-4 py-2 rounded-lg"
+            >
+              Need help? Contact our support team
+            </a>
+          </div>
           <img
-            src="https://cdn.dribbble.com/userupload/12272146/file/original-839557f4883c81f19fdac3da6401505a.png?resize=2048x1537&vertical=center"
+            src="https://cdn.midjourney.com/6faeb637-362b-48ad-8540-4fe9124d8e46/0_0.png"
             alt="Dashboard Preview"
             className="w-full h-full object-cover"
           />
